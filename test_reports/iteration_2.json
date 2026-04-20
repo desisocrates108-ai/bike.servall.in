@@ -1,0 +1,42 @@
+{
+  "summary": "Modules 3 & 4 backend testing completed. Created /app/backend/tests/test_modules_3_4.py with 14 tests covering new constants/config, followup mandatory notes+scheduled_date, new followup fields, lead priority sync from lead_temperature, 60s duplicate-rate control (429), /tasks (today/missed/upcoming/at_risk), at_risk auto-flag on 2+ missed followups, stricter Deal stage (needs Connected followup), stricter Booking stage (needs final_deal_price + approved deal if required), auto approval flag on discount>=5000, request-approval + approve/reject (admin RBAC), negotiation_history logging, /leads/{id}/negotiations RBAC, and the new analytics endpoints (summary new keys, performance admin-only, deals). All 14 new tests PASSED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_modules_3_4.py",
+    "/app/test_reports/pytest/pytest_results_iter2.xml"
+  ],
+  "action_items": [
+    "Update the legacy iteration-1 suite /app/backend/tests/backend_test.py to reflect Module 3/4 rule changes (4 expected failures): (a) test_stage_deal_success_after_prices must add a call_status='Connected' follow-up before moving to Deal; (b) test_stage_booking_success_with_payment_mode must set deal.final_deal_price and ensure no approval required (discount<5000); (c) test_followup_invalid_type should expect 422 (Pydantic validation) OR include required 'notes' field; (d) test_timeline_has_events needs 'notes' in follow-up body. These are non-bugs: product behavior changed per spec."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1489 lines — consider splitting into modules (auth, leads, followups, deals, analytics, masters) for maintainability.",
+    "update_lead: auto-approval flag is only set when 'deal' key is in updates; if a caller patches only discount without other deal fields the existing branch already handles it, but approval_required is never reset to False when discount drops below threshold on a subsequent edit. Consider resetting approval_required/approval_status when discount<threshold and not yet approved.",
+    "add_followup at_risk recomputation counts all past-dated not-done follow-ups including ones scheduled yesterday that may not have triggered SLA yet; business rule may require excluding same-day or grace-period.",
+    "change_stage to 'Booking' marks deal.deal_status='Converted' but does not clear approval_required — fine, but ensure analytics downstream treats Converted consistently.",
+    "/tasks?kind=missed uses lead.next_followup_date < today but does not filter done follow-ups at follow-up level; acceptable because next_followup_date reflects the upcoming follow-up, but rename or document clearly.",
+    "CORS middleware is added AFTER app.include_router(api); with Starlette this still works, but convention is to add middleware before routers. Not a functional bug.",
+    "datetime.fromisoformat(last['created_at']) will fail if stored without timezone; current writes use now_iso() which includes offset so OK, but add defensive parsing.",
+    "analytics_summary avg_discount uses 'round(..., 0)' — returns float; keep consistent with contract (int vs float)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_modules_3_4.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 new Module 3 & 4 tests; legacy suite: 39/43, 4 failures are expected spec changes)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123, sales1@dealer.com/sales123, sales2@dealer.com/sales123 — all verified working via /api/auth/login",
+  "seed_data_creation": "Tests create TEST_-prefixed leads and follow-ups via API; at_risk test also inserts 2 past-dated not-done follow-ups directly into MongoDB (collection: followups) via pymongo. No production/seed data modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use /app/backend/tests/test_modules_3_4.py as regression. The at_risk test sleeps 62s to satisfy FOLLOWUP_MIN_GAP_SECONDS=60 — keep pytest timeout at >=120s for that class. Legacy backend_test.py needs 4 small updates as listed in action_items before it passes 100% again. MongoDB is at mongodb://localhost:27017, DB=twowheeler_crm. Direct pymongo access is used for seeding past-dated missed follow-ups because the API enforces a 60s gap and can't create in-past scheduled_date quickly.",
+  "rca of the issue": "No issues found in Modules 3 & 4 implementation. Four failures in legacy suite are product-spec driven (stricter Deal/Booking rules, FollowupIn 'notes' now required) — update the older tests, not the code."
+}

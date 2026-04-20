@@ -9,6 +9,7 @@ import Leads from "./pages/Leads";
 import LeadForm from "./pages/LeadForm";
 import LeadDetail from "./pages/LeadDetail";
 import Funnel from "./pages/Funnel";
+import Tasks from "./pages/Tasks";
 import UsersPage from "./pages/Users";
 import Masters from "./pages/Masters";
 import { Toaster } from "sonner";
@@ -27,6 +28,7 @@ function App() {
             <Route path="/leads/new" element={<ProtectedRoute><LeadForm /></ProtectedRoute>} />
             <Route path="/leads/:id" element={<ProtectedRoute><LeadDetail /></ProtectedRoute>} />
             <Route path="/funnel" element={<ProtectedRoute><Funnel /></ProtectedRoute>} />
+            <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute roles={["super_admin", "admin"]}><UsersPage /></ProtectedRoute>} />
             <Route path="/masters" element={<ProtectedRoute roles={["super_admin"]}><Masters /></ProtectedRoute>} />
           </Routes>

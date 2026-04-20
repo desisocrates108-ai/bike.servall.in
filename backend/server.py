@@ -54,10 +54,25 @@ PRIORITIES = ["Hot", "Warm", "Cold"]
 STAGES = ["Inquiry", "Follow-up", "Interest", "Test Ride", "Deal",
           "Booking", "Delivery", "Registration", "Feedback", "Lost"]
 PAYMENT_MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Finance"]
-FOLLOWUP_TYPES = ["Call", "Visit", "WhatsApp"]
+FOLLOWUP_TYPES = ["Call", "WhatsApp", "Visit", "Test Ride", "Other"]
+CALL_STATUSES = ["Connected", "Not Connected"]
+CUSTOMER_RESPONSES = ["Interested", "Not Interested", "Call Later",
+                      "Not Reachable", "Switched Off"]
+OUTCOME_TAGS = ["Progressed", "No Progress", "Converted", "Lost"]
 LOST_REASONS = ["Price Issue", "Competitor", "Stock Issue", "No Follow-up",
                 "Not Interested", "Other"]
+DEAL_LOSS_REASONS = ["Price too high", "Better competitor offer",
+                     "Finance rejected", "Delay / follow-up issue",
+                     "Stock Issue", "Not interested", "Other"]
+DEAL_STATUSES = ["Draft", "Negotiation", "Approval Pending",
+                 "Approved", "Rejected", "Converted"]
 ROLES = ["super_admin", "admin", "sales_executive"]
+
+# Configurable knobs
+DISCOUNT_APPROVAL_THRESHOLD = 5000.0   # ₹ discount above this needs manager approval
+FOLLOWUP_MIN_GAP_SECONDS = 60          # prevent duplicate rapid entries
+SLA_HOURS_NO_FOLLOWUP = 24             # hours after creation w/o follow-up -> escalate
+AT_RISK_MISSED_COUNT = 2               # missed follow-ups to mark lead at risk
 
 
 # ============================================================
@@ -196,6 +211,15 @@ class DealInfo(BaseModel):
     offered_price: Optional[float] = None
     discount: Optional[float] = None
     interest_level: Optional[str] = None  # Hot/Warm/Cold
+    ex_showroom_price: Optional[float] = None
+    final_deal_price: Optional[float] = None
+    deal_status: Optional[str] = None  # Draft/Negotiation/Approval Pending/Approved/Rejected/Converted
+    approval_required: Optional[bool] = None
+    approval_status: Optional[str] = None  # Pending / Approved / Rejected
+    approved_by: Optional[str] = None
+    approved_by_name: Optional[str] = None
+    approved_at: Optional[str] = None
+    approval_remarks: Optional[str] = None
 
 
 class FinanceInfo(BaseModel):
@@ -261,9 +285,27 @@ class StageChange(BaseModel):
 
 class FollowupIn(BaseModel):
     type: str
-    notes: Optional[str] = None
-    scheduled_date: Optional[str] = None
-    done: bool = False
+    notes: str
+    scheduled_date: Optional[str] = None  # YYYY-MM-DD
+    scheduled_time: Optional[str] = None  # HH:MM
+    done: bool = True  # marks this follow-up as completed (call/visit done)
+    call_status: Optional[str] = None
+    customer_response: Optional[str] = None
+    outcome_tag: Optional[str] = None
+    lead_temperature: Optional[str] = None  # Hot/Warm/Cold
+    loss_reason: Optional[str] = None
+    loss_reason_text: Optional[str] = None
+    call_duration: Optional[int] = None  # seconds
+
+
+class DealApproveIn(BaseModel):
+    approve: bool
+    remarks: Optional[str] = None
+
+
+class DealLossIn(BaseModel):
+    reason: str
+    text: Optional[str] = None
 
 
 # ============================================================
@@ -669,13 +711,94 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if "assigned_to" in updates and user["role"] == "sales_executive":
         del updates["assigned_to"]
+
+    # Negotiation history: log if deal fields changed
+    if "deal" in updates:
+        old_deal = lead.get("deal") or {}
+        new_deal = updates["deal"] or {}
+        changed = {}
+        for k in ["customer_expected_price", "offered_price", "discount",
+                  "final_deal_price", "interest_level", "ex_showroom_price"]:
+            if new_deal.get(k) != old_deal.get(k):
+                changed[k] = {"from": old_deal.get(k), "to": new_deal.get(k)}
+        if changed:
+            await db.negotiation_history.insert_one({
+                "id": str(uuid.uuid4()),
+                "lead_id": lid,
+                "changed_by": user["id"],
+                "changed_by_name": user["name"],
+                "changes": changed,
+                "note": (updates.get("notes") or None),
+                "created_at": now_iso(),
+            })
+
+        # Auto-flag approval required when discount exceeds threshold
+        discount = new_deal.get("discount") or 0
+        if discount and discount >= DISCOUNT_APPROVAL_THRESHOLD:
+            new_deal["approval_required"] = True
+            if not new_deal.get("approval_status"):
+                new_deal["approval_status"] = "Pending"
+            if not new_deal.get("deal_status"):
+                new_deal["deal_status"] = "Approval Pending"
+        updates["deal"] = new_deal
+
     if updates:
         updates["updated_at"] = now_iso()
         await db.leads.update_one({"id": lid}, {"$set": updates})
-        await add_timeline(lid, "Deal Updated", user, {"fields": list(updates.keys())})
+        await add_timeline(lid, "Lead Updated", user, {"fields": list(updates.keys())})
         if "assigned_to" in updates:
             await add_timeline(lid, "Lead Assigned", user, {"assigned_to": updates["assigned_to"]})
     return await db.leads.find_one({"id": lid}, {"_id": 0})
+
+
+@api.post("/leads/{lid}/deal/request-approval")
+async def deal_request_approval(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    deal = lead.get("deal") or {}
+    deal["approval_required"] = True
+    deal["approval_status"] = "Pending"
+    deal["deal_status"] = "Approval Pending"
+    await db.leads.update_one({"id": lid}, {"$set": {"deal": deal, "updated_at": now_iso()}})
+    await add_timeline(lid, "Approval Requested", user,
+                       {"discount": deal.get("discount"), "final_price": deal.get("final_deal_price")})
+    return await db.leads.find_one({"id": lid}, {"_id": 0})
+
+
+@api.post("/leads/{lid}/deal/approve")
+async def deal_approve(lid: str, body: DealApproveIn,
+                       user: dict = Depends(require_roles("super_admin", "admin"))):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if user["role"] == "admin" and lead.get("branch_id") != user.get("branch_id"):
+        raise HTTPException(403, "Cannot approve deals outside your branch")
+    deal = lead.get("deal") or {}
+    deal["approval_required"] = True
+    deal["approval_status"] = "Approved" if body.approve else "Rejected"
+    deal["deal_status"] = "Approved" if body.approve else "Rejected"
+    deal["approved_by"] = user["id"]
+    deal["approved_by_name"] = user["name"]
+    deal["approved_at"] = now_iso()
+    deal["approval_remarks"] = body.remarks
+    await db.leads.update_one({"id": lid}, {"$set": {"deal": deal, "updated_at": now_iso()}})
+    await add_timeline(lid, "Deal " + ("Approved" if body.approve else "Rejected"), user,
+                       {"remarks": body.remarks})
+    return await db.leads.find_one({"id": lid}, {"_id": 0})
+
+
+@api.get("/leads/{lid}/negotiations")
+async def list_negotiations(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    items = await db.negotiation_history.find({"lead_id": lid}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
 
 
 @api.post("/leads/{lid}/stage")
@@ -693,12 +816,17 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
     if body.stage == "Deal":
         if not (deal.get("offered_price") and deal.get("customer_expected_price")):
             raise HTTPException(400, "Fill customer expected price and offered price before moving to Deal")
+        # Must have at least one Connected follow-up
+        connected = await db.followups.count_documents({"lead_id": lid, "call_status": "Connected"})
+        if connected == 0:
+            raise HTTPException(400, "Log at least one Connected follow-up before moving to Deal")
     if body.stage == "Booking":
         if not lead.get("payment_mode"):
             raise HTTPException(400, "Set payment mode before Booking")
-    if body.stage == "Delivery":
-        # must have passed Booking stage (set stage to Booking at least once)
-        pass
+        if not deal.get("final_deal_price"):
+            raise HTTPException(400, "Set Final Deal Price before Booking")
+        if deal.get("approval_required") and deal.get("approval_status") != "Approved":
+            raise HTTPException(400, "Deal requires manager approval before Booking")
     if body.stage == "Registration":
         docs = lead.get("documents") or []
         if len(docs) == 0:
@@ -711,6 +839,10 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
     if body.stage == "Lost":
         upd["lost_reason"] = body.lost_reason
         upd["lost_reason_text"] = body.lost_reason_text
+    if body.stage == "Booking":
+        # mark deal as converted
+        deal["deal_status"] = "Converted"
+        upd["deal"] = deal
     await db.leads.update_one({"id": lid}, {"$set": upd})
     await add_timeline(lid, "Stage Changed", user,
                        {"from": lead.get("stage"), "to": body.stage,
@@ -758,29 +890,119 @@ async def add_followup(lid: str, body: FollowupIn, user: dict = Depends(get_curr
         raise HTTPException(403, "Access denied")
     if body.type not in FOLLOWUP_TYPES:
         raise HTTPException(400, "Invalid follow-up type")
+    if body.call_status and body.call_status not in CALL_STATUSES:
+        raise HTTPException(400, "Invalid call status")
+    if body.customer_response and body.customer_response not in CUSTOMER_RESPONSES:
+        raise HTTPException(400, "Invalid customer response")
+    if body.outcome_tag and body.outcome_tag not in OUTCOME_TAGS:
+        raise HTTPException(400, "Invalid outcome tag")
+    if not body.scheduled_date:
+        raise HTTPException(400, "Next follow-up date is required")
+
+    # Duplicate / rapid entry control
+    last = await db.followups.find_one({"lead_id": lid},
+                                       {"_id": 0}, sort=[("created_at", -1)])
+    if last:
+        last_ts = datetime.fromisoformat(last["created_at"])
+        gap = (datetime.now(timezone.utc) - last_ts).total_seconds()
+        if gap < FOLLOWUP_MIN_GAP_SECONDS:
+            raise HTTPException(429, f"Please wait {FOLLOWUP_MIN_GAP_SECONDS - int(gap)}s before logging another follow-up")
+
+    sched = body.scheduled_date
+    if body.scheduled_time:
+        sched_full = f"{body.scheduled_date}T{body.scheduled_time}"
+    else:
+        sched_full = f"{body.scheduled_date}T10:00"
+
     doc = {
         "id": str(uuid.uuid4()),
         "lead_id": lid,
+        "branch_id": lead.get("branch_id"),
+        "assigned_to": lead.get("assigned_to"),
         "type": body.type,
         "notes": body.notes,
-        "scheduled_date": body.scheduled_date,
+        "scheduled_date": sched,
+        "scheduled_time": body.scheduled_time,
+        "scheduled_at": sched_full,
         "done": body.done,
+        "done_at": now_iso() if body.done else None,
+        "call_status": body.call_status,
+        "customer_response": body.customer_response,
+        "outcome_tag": body.outcome_tag,
+        "lead_temperature": body.lead_temperature,
+        "loss_reason": body.loss_reason,
+        "loss_reason_text": body.loss_reason_text,
+        "call_duration": body.call_duration,
         "created_by": user["id"],
         "created_by_name": user["name"],
         "created_at": now_iso(),
     }
     await db.followups.insert_one(doc)
+
+    # Update lead
+    lead_updates: Dict[str, Any] = {
+        "next_followup_date": sched,
+        "next_followup_time": body.scheduled_time,
+        "next_followup_type": body.type,
+        "last_followup_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    if body.lead_temperature and body.lead_temperature in PRIORITIES:
+        lead_updates["priority"] = body.lead_temperature
+
+    # Check at-risk (2+ missed)
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    missed_count = await db.followups.count_documents({
+        "lead_id": lid,
+        "done": False,
+        "scheduled_date": {"$lt": today_iso},
+    })
+    lead_updates["at_risk"] = missed_count >= AT_RISK_MISSED_COUNT
+    lead_updates["missed_followups"] = missed_count
+
     await db.leads.update_one(
         {"id": lid},
-        {"$set": {
-            "next_followup_date": body.scheduled_date,
-            "next_followup_type": body.type,
-            "updated_at": now_iso(),
-        },
-         "$inc": {"followup_count": 1}},
+        {"$set": lead_updates, "$inc": {"followup_count": 1}},
     )
-    await add_timeline(lid, "Follow-up Added", user, {"type": body.type, "scheduled_date": body.scheduled_date})
+    await add_timeline(
+        lid, "Follow-up Added", user,
+        {"type": body.type, "scheduled_date": sched,
+         "call_status": body.call_status, "response": body.customer_response,
+         "outcome": body.outcome_tag},
+    )
     return {k: v for k, v in doc.items() if k != "_id"}
+
+
+# ============================================================
+# Tasks (derived from follow-ups)
+# ============================================================
+
+def _task_scope_query(user: dict) -> Dict[str, Any]:
+    if user["role"] == "sales_executive":
+        return {"assigned_to": user["id"]}
+    if user["role"] == "admin":
+        return {"branch_id": user.get("branch_id")}
+    return {}
+
+
+@api.get("/tasks")
+async def list_tasks(kind: str = Query("today"),
+                     user: dict = Depends(get_current_user)):
+    """kind: today | missed | upcoming | all"""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    base = _task_scope_query(user)
+    q: Dict[str, Any] = {**base}
+    if kind == "today":
+        q.update({"next_followup_date": today})
+    elif kind == "missed":
+        q.update({"next_followup_date": {"$lt": today},
+                  "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}})
+    elif kind == "upcoming":
+        q.update({"next_followup_date": {"$gt": today}})
+    elif kind == "at_risk":
+        q.update({"at_risk": True})
+    leads = await db.leads.find(q, {"_id": 0}).sort("next_followup_date", 1).to_list(500)
+    return leads
 
 
 # ============================================================
@@ -898,11 +1120,32 @@ async def analytics_summary(user: dict = Depends(get_current_user)):
     async for row in db.leads.aggregate(pipeline2):
         per_stage[row["_id"] or "Unknown"] = row["count"]
 
-    converted = await db.leads.count_documents({**base, "stage": {"$in": ["Delivery", "Registration", "Feedback"]}})
+    converted = await db.leads.count_documents({**base, "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]}})
     lost = await db.leads.count_documents({**base, "stage": "Lost"})
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     due_today = await db.leads.count_documents({**base, "next_followup_date": today})
+    missed = await db.leads.count_documents({**base,
+                                             "next_followup_date": {"$lt": today},
+                                             "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}})
+    upcoming = await db.leads.count_documents({**base, "next_followup_date": {"$gt": today}})
+    at_risk = await db.leads.count_documents({**base, "at_risk": True})
+
+    # Conversion rate
+    conversion_rate = round((converted / total) * 100, 1) if total else 0.0
+
+    # Deals in progress
+    deals_in_progress = await db.leads.count_documents({**base, "stage": "Deal"})
+    # Avg discount
+    avg_discount = 0.0
+    pipeline3 = [{"$match": {**base, "deal.discount": {"$gt": 0}}},
+                 {"$group": {"_id": None, "avg": {"$avg": "$deal.discount"}}}]
+    async for row in db.leads.aggregate(pipeline3):
+        avg_discount = round(row.get("avg") or 0, 0)
+
+    # Pending approvals
+    pending_approvals_q = {**base, "deal.approval_required": True, "deal.approval_status": "Pending"}
+    pending_approvals = await db.leads.count_documents(pending_approvals_q)
 
     return {
         "total_leads": total,
@@ -911,6 +1154,93 @@ async def analytics_summary(user: dict = Depends(get_current_user)):
         "converted": converted,
         "lost": lost,
         "followups_due_today": due_today,
+        "followups_missed": missed,
+        "followups_upcoming": upcoming,
+        "at_risk": at_risk,
+        "conversion_rate": conversion_rate,
+        "deals_in_progress": deals_in_progress,
+        "avg_discount": avg_discount,
+        "pending_approvals": pending_approvals,
+    }
+
+
+@api.get("/analytics/performance")
+async def analytics_performance(user: dict = Depends(require_roles("super_admin", "admin"))):
+    """Per sales-executive performance metrics."""
+    user_q: Dict[str, Any] = {"role": "sales_executive"}
+    lead_base: Dict[str, Any] = {}
+    if user["role"] == "admin":
+        user_q["branch_id"] = user.get("branch_id")
+        lead_base["branch_id"] = user.get("branch_id")
+
+    execs = await db.users.find(user_q, {"_id": 0, "password_hash": 0}).to_list(1000)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    out = []
+    for e in execs:
+        lq = {**lead_base, "assigned_to": e["id"]}
+        total = await db.leads.count_documents(lq)
+        converted = await db.leads.count_documents({**lq, "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]}})
+        lost = await db.leads.count_documents({**lq, "stage": "Lost"})
+        missed = await db.leads.count_documents({**lq, "next_followup_date": {"$lt": today},
+                                                  "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}})
+        at_risk = await db.leads.count_documents({**lq, "at_risk": True})
+        fu_total = await db.followups.count_documents({"assigned_to": e["id"]})
+        fu_connected = await db.followups.count_documents({"assigned_to": e["id"], "call_status": "Connected"})
+        connect_rate = round((fu_connected / fu_total) * 100, 1) if fu_total else 0.0
+        conv_rate = round((converted / total) * 100, 1) if total else 0.0
+        out.append({
+            "user_id": e["id"],
+            "name": e["name"],
+            "branch_id": e.get("branch_id"),
+            "total_leads": total,
+            "converted": converted,
+            "lost": lost,
+            "missed_followups": missed,
+            "at_risk": at_risk,
+            "followups_logged": fu_total,
+            "connect_rate": connect_rate,
+            "conversion_rate": conv_rate,
+        })
+    out.sort(key=lambda x: (-x["converted"], -x["conversion_rate"]))
+    return out
+
+
+@api.get("/analytics/deals")
+async def analytics_deals(user: dict = Depends(get_current_user)):
+    base: Dict[str, Any] = {}
+    if user["role"] == "sales_executive":
+        base["assigned_to"] = user["id"]
+    elif user["role"] == "admin":
+        base["branch_id"] = user.get("branch_id")
+
+    in_progress = await db.leads.count_documents({**base, "stage": "Deal"})
+    booked = await db.leads.count_documents({**base, "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]}})
+    total_with_deal = await db.leads.count_documents({**base, "deal.final_deal_price": {"$gt": 0}})
+    deal_to_booking_rate = round((booked / (in_progress + booked)) * 100, 1) if (in_progress + booked) else 0.0
+
+    # Loss reasons
+    pipeline = [{"$match": {**base, "stage": "Lost"}},
+                {"$group": {"_id": "$lost_reason", "count": {"$sum": 1}}}]
+    loss_reasons = {}
+    async for row in db.leads.aggregate(pipeline):
+        loss_reasons[row["_id"] or "Unknown"] = row["count"]
+
+    # Branch-wise deal value (super_admin only scope meaningful, but works for admin too)
+    pipeline2 = [{"$match": {**base, "deal.final_deal_price": {"$gt": 0}}},
+                 {"$group": {"_id": "$branch_id",
+                             "count": {"$sum": 1},
+                             "total_value": {"$sum": "$deal.final_deal_price"}}}]
+    branches = []
+    async for row in db.leads.aggregate(pipeline2):
+        branches.append({"branch_id": row["_id"], "count": row["count"], "total_value": row["total_value"]})
+
+    return {
+        "in_progress": in_progress,
+        "booked": booked,
+        "total_with_deal": total_with_deal,
+        "deal_to_booking_rate": deal_to_booking_rate,
+        "loss_reasons": loss_reasons,
+        "branches": branches,
     }
 
 
@@ -1126,8 +1456,19 @@ async def get_constants():
         "stages": STAGES,
         "payment_modes": PAYMENT_MODES,
         "followup_types": FOLLOWUP_TYPES,
+        "call_statuses": CALL_STATUSES,
+        "customer_responses": CUSTOMER_RESPONSES,
+        "outcome_tags": OUTCOME_TAGS,
         "lost_reasons": LOST_REASONS,
+        "deal_loss_reasons": DEAL_LOSS_REASONS,
+        "deal_statuses": DEAL_STATUSES,
         "roles": ROLES,
+        "config": {
+            "discount_approval_threshold": DISCOUNT_APPROVAL_THRESHOLD,
+            "followup_min_gap_seconds": FOLLOWUP_MIN_GAP_SECONDS,
+            "sla_hours_no_followup": SLA_HOURS_NO_FOLLOWUP,
+            "at_risk_missed_count": AT_RISK_MISSED_COUNT,
+        },
     }
 
 

@@ -11,6 +11,7 @@ import {
   Bike,
   UserCog,
   PlusCircle,
+  CalendarClock,
 } from "lucide-react";
 import { roleLabel } from "../lib/labels";
 
@@ -51,6 +52,9 @@ export default function Layout({ children }) {
           </NavLink>
           <NavLink to="/leads" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-leads">
             <ListChecks className="w-4 h-4" strokeWidth={1.75} /> Leads
+          </NavLink>
+          <NavLink to="/tasks" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-tasks">
+            <CalendarClock className="w-4 h-4" strokeWidth={1.75} /> Tasks
           </NavLink>
           <NavLink to="/funnel" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-funnel">
             <KanbanSquare className="w-4 h-4" strokeWidth={1.75} /> Sales Funnel

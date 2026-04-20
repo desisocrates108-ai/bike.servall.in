@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
-import { TrendingUp, CheckCircle2, XCircle, Clock, Flame, Users2 } from "lucide-react";
+import {
+  TrendingUp, CheckCircle2, XCircle, Clock, Flame, Users2,
+  AlertTriangle, CalendarClock, BadgePercent, Gavel,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Card = ({ children, className = "", testid }) => (
@@ -10,27 +13,41 @@ const Card = ({ children, className = "", testid }) => (
   </div>
 );
 
-const Stat = ({ label, value, icon: Icon, testid }) => (
-  <Card testid={testid} className="hover:border-zinc-300 transition-colors">
-    <div className="flex items-start justify-between">
-      <div>
-        <div className="overline">{label}</div>
-        <div className="font-mono text-3xl font-bold mt-2 tabular">{value}</div>
+const Stat = ({ label, value, icon: Icon, tone = "dark", testid, linkTo }) => {
+  const toneBg = {
+    dark: "bg-zinc-900",
+    danger: "bg-rose-600",
+    warn: "bg-amber-500",
+    ok: "bg-emerald-600",
+    info: "bg-blue-600",
+  }[tone];
+  const content = (
+    <Card testid={testid} className="hover:border-zinc-300 transition-colors">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="overline">{label}</div>
+          <div className="font-mono text-3xl font-bold mt-2 tabular">{value}</div>
+        </div>
+        <div className={`w-9 h-9 ${toneBg} rounded-sm flex items-center justify-center`}>
+          <Icon className="w-4 h-4 text-white" strokeWidth={1.75} />
+        </div>
       </div>
-      <div className="w-9 h-9 bg-zinc-900 rounded-sm flex items-center justify-center">
-        <Icon className="w-4 h-4 text-white" strokeWidth={1.75} />
-      </div>
-    </div>
-  </Card>
-);
+    </Card>
+  );
+  return linkTo ? <Link to={linkTo}>{content}</Link> : content;
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
+  const [perf, setPerf] = useState([]);
 
   useEffect(() => {
     api.get("/analytics/summary").then((r) => setSummary(r.data)).catch(() => {});
-  }, []);
+    if (user?.role !== "sales_executive") {
+      api.get("/analytics/performance").then((r) => setPerf(r.data)).catch(() => {});
+    }
+  }, [user?.role]);
 
   if (!summary)
     return (
@@ -62,12 +79,27 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <Stat label="Total Leads" value={summary.total_leads} icon={TrendingUp} testid="stat-total" />
-        <Stat label="Converted" value={summary.converted} icon={CheckCircle2} testid="stat-converted" />
-        <Stat label="Lost" value={summary.lost} icon={XCircle} testid="stat-lost" />
-        <Stat label="Follow-ups Today" value={summary.followups_due_today} icon={Clock} testid="stat-fu-today" />
+        <Stat label="Converted" value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" />
+        <Stat label="Lost" value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" />
+        <Stat label="Conversion %" value={`${summary.conversion_rate}%`} icon={BadgePercent} tone="info" testid="stat-conv-rate" />
       </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Stat label="Due Today" value={summary.followups_due_today} icon={Clock} testid="stat-due-today" linkTo="/tasks?kind=today" />
+        <Stat label="Missed" value={summary.followups_missed} icon={AlertTriangle} tone="danger" testid="stat-missed" linkTo="/tasks?kind=missed" />
+        <Stat label="Upcoming" value={summary.followups_upcoming} icon={CalendarClock} testid="stat-upcoming" linkTo="/tasks?kind=upcoming" />
+        <Stat label="At Risk" value={summary.at_risk} icon={AlertTriangle} tone="warn" testid="stat-at-risk" linkTo="/tasks?kind=at_risk" />
+      </div>
+
+      {user?.role !== "sales_executive" && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <Stat label="Deals in Progress" value={summary.deals_in_progress} icon={Gavel} tone="info" testid="stat-deals-progress" />
+          <Stat label="Pending Approvals" value={summary.pending_approvals} icon={AlertTriangle} tone="warn" testid="stat-pending-approvals" />
+          <Stat label="Avg Discount" value={summary.avg_discount ? `₹${summary.avg_discount}` : "—"} icon={BadgePercent} testid="stat-avg-discount" />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card testid="card-by-source">
@@ -119,6 +151,43 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {user?.role !== "sales_executive" && perf.length > 0 && (
+        <Card testid="card-top-execs" className="mt-4">
+          <div className="mb-6">
+            <div className="overline">Team</div>
+            <div className="font-display text-xl font-bold mt-1">Top performing sales executives</div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table w-full">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Leads</th>
+                  <th>Converted</th>
+                  <th>Lost</th>
+                  <th>Missed</th>
+                  <th>Connect %</th>
+                  <th>Conv %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perf.map((p) => (
+                  <tr key={p.user_id} data-testid={`perf-row-${p.user_id}`}>
+                    <td className="font-semibold">{p.name}</td>
+                    <td className="font-mono">{p.total_leads}</td>
+                    <td className="font-mono text-emerald-700">{p.converted}</td>
+                    <td className="font-mono text-rose-700">{p.lost}</td>
+                    <td className="font-mono text-amber-700">{p.missed_followups}</td>
+                    <td className="font-mono">{p.connect_rate}%</td>
+                    <td className="font-mono font-bold">{p.conversion_rate}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
