@@ -1,0 +1,84 @@
+{
+  "project_details": {
+    "name": "Two-Wheeler Dealership Sales CRM",
+    "type": "saas_app",
+    "theme": "Light",
+    "archetype": "Archetype 4 (Swiss & High-Contrast)"
+  },
+  "design_philosophy": {
+    "emotion": "Authoritative, Fast, Tactical, Clear",
+    "description": "A high-density, performance-driven CRM for motorcycle sales. Adopts a 'Control Room' mentality using the Swiss Brutalist aesthetic. Colors are strictly functional, layout prioritizes scannability, and typography uses strong contrasts to establish hierarchy without relying on excessive decorative elements."
+  },
+  "colors": {
+    "background": "#F4F4F5",
+    "surface": "#FFFFFF",
+    "text_primary": "#09090B",
+    "text_secondary": "#52525B",
+    "border": "#E4E4E7",
+    "primary": "#2563EB",
+    "primary_hover": "#1D4ED8",
+    "primary_foreground": "#FFFFFF",
+    "accent_hot": "#E11D48",
+    "accent_warm": "#F59E0B",
+    "accent_cold": "#3B82F6",
+    "success": "#16A34A"
+  },
+  "typography": {
+    "fonts": {
+      "heading": "'Cabinet Grotesk', sans-serif",
+      "body": "'IBM Plex Sans', sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl font-black tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl font-semibold",
+      "h4": "text-lg font-medium",
+      "body": "text-sm md:text-base leading-relaxed text-zinc-800",
+      "overline_labels": "text-xs font-bold uppercase tracking-[0.2em] text-zinc-500",
+      "data_numbers": "font-mono tracking-tight text-zinc-900"
+    }
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6",
+    "kanban_layout": "flex overflow-x-auto gap-4 pb-4 items-start",
+    "container_padding": "p-4 md:p-8",
+    "card_style": "bg-white border border-zinc-200 rounded-sm shadow-sm transition-all duration-200 p-5 md:p-6",
+    "card_hover": "hover:-translate-y-0.5 hover:shadow-md hover:border-zinc-300",
+    "sidebar": "w-64 border-r border-zinc-200 bg-white min-h-screen flex flex-col"
+  },
+  "components": {
+    "buttons": "rounded-sm font-bold tracking-wide transition-colors",
+    "inputs": "rounded-sm border-zinc-300 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 bg-white",
+    "tables": "w-full text-sm text-left border-collapse",
+    "badges": "rounded-sm text-[10px] md:text-xs px-2 py-0.5 font-bold uppercase tracking-wider",
+    "tabs": "rounded-none border-b border-zinc-200",
+    "modals": "bg-white border border-zinc-200 shadow-xl rounded-sm"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "stroke-[1.5] text-zinc-950"
+  },
+  "image_urls": {
+    "login_hero": {
+      "url": "https://images.unsplash.com/photo-1771402382481-de35db6c4159?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwyfHxtb3RvcmN5Y2xlJTIwc2hvd3Jvb218ZW58MHx8fHwxNzc2Njg1ODgxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Modern lounge with red motorcycle. Use this for the image panel on the split login screen layout.",
+      "category": "login_background"
+    },
+    "empty_state_vehicles": {
+      "url": "https://images.pexels.com/photos/5622286/pexels-photo-5622286.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Man inspecting motorcycles indoors. Use for empty state pages like 'No leads found' or 'No vehicles in inventory'.",
+      "category": "empty_state"
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Write all React components in `.jsx` or `.js` files, DO NOT use `.tsx`.",
+    "Import fonts properly. If 'Cabinet Grotesk' is not easily available via Google Fonts, use 'Space Grotesk' or 'Outfit' as a fallback, but strictly avoid 'Inter' or generic sans for headings.",
+    "Use 'IBM Plex Sans' (or standard sans fallback) for all body text and UI data.",
+    "Layout Approach: Adopt a 'Control Room' dense aesthetic. The main background should be #F4F4F5 (Tailwind zinc-100), with pure white (#FFFFFF) cards. Use a 1px border (`border-zinc-200`) for definition. Avoid heavy drop shadows.",
+    "For the Sales Funnel / Kanban board: Make it scroll horizontally. Use light grey (`bg-zinc-50`) column backgrounds. Cards should have colored indicator strips on the left edge based on priority (Red for Hot, Amber for Warm, Blue for Cold).",
+    "Lead Creation Form: Utilize conditional rendering. The 'Exchange Info' section must only appear when 'Exchange' is selected. Use Shadcn components heavily customized to match the sharp, low-radius border aesthetic (`rounded-sm`).",
+    "Visual Hierarchy: Use uppercase tracking for small labels (e.g., 'LEAD SOURCE', 'PRIORITY') and large, bold sizes for key numbers/names.",
+    "Testing Attributes: ALWAYS include `data-testid` attributes (kebab-case, role-based) on interactive elements (inputs, buttons, tab triggers, modal toggles). Examples: `data-testid=\"submit-lead-button\"`, `data-testid=\"lead-source-select\"`."
+  ]
+}
