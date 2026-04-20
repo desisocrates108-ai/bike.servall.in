@@ -66,6 +66,9 @@ DEAL_LOSS_REASONS = ["Price too high", "Better competitor offer",
                      "Stock Issue", "Not interested", "Other"]
 DEAL_STATUSES = ["Draft", "Negotiation", "Approval Pending",
                  "Approved", "Rejected", "Converted"]
+BOOKING_STATUSES = ["Pending", "Confirmed", "Cancelled"]
+ALLOTMENT_STATUSES = ["Pending", "Allotted"]
+LOAN_STATUSES = ["Pending", "Approved", "Rejected"]
 ROLES = ["super_admin", "admin", "sales_executive"]
 
 # Configurable knobs
@@ -306,6 +309,57 @@ class DealApproveIn(BaseModel):
 class DealLossIn(BaseModel):
     reason: str
     text: Optional[str] = None
+
+
+class BookingIn(BaseModel):
+    booking_date: Optional[str] = None  # YYYY-MM-DD
+    expected_delivery_date: str
+    booking_amount: float
+    brand_id: Optional[str] = None
+    model_id: Optional[str] = None
+    variant_id: Optional[str] = None
+    color_id: Optional[str] = None
+    finance_company: Optional[str] = None
+    down_payment: Optional[float] = None
+    emi: Optional[float] = None
+    loan_status: Optional[str] = None
+    exchange_final_value: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class BookingUpdate(BaseModel):
+    booking_date: Optional[str] = None
+    expected_delivery_date: Optional[str] = None
+    booking_amount: Optional[float] = None
+    brand_id: Optional[str] = None
+    model_id: Optional[str] = None
+    variant_id: Optional[str] = None
+    color_id: Optional[str] = None
+    finance_company: Optional[str] = None
+    down_payment: Optional[float] = None
+    emi: Optional[float] = None
+    loan_status: Optional[str] = None
+    exchange_final_value: Optional[float] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+
+class PaymentIn(BaseModel):
+    amount: float
+    date: Optional[str] = None  # YYYY-MM-DD
+    mode: str  # Cash/UPI/Bank Transfer/Finance/Cheque
+    notes: Optional[str] = None
+
+
+class AllotmentIn(BaseModel):
+    chassis_number: str
+    engine_number: Optional[str] = None
+
+
+class AllotmentUpdate(BaseModel):
+    chassis_number: Optional[str] = None
+    engine_number: Optional[str] = None
+    status: Optional[str] = None
 
 
 # ============================================================
@@ -1205,6 +1259,351 @@ async def analytics_performance(user: dict = Depends(require_roles("super_admin"
     return out
 
 
+# ============================================================
+# Bookings (Module 5)
+# ============================================================
+
+async def _booking_payment_totals(booking_id: str):
+    total = 0.0
+    async for p in db.payments.find({"booking_id": booking_id}, {"_id": 0, "amount": 1}):
+        total += float(p.get("amount") or 0)
+    return total
+
+
+async def _recompute_booking(booking: dict):
+    bid = booking["id"]
+    paid = await _booking_payment_totals(bid)
+    pending = float(booking.get("final_deal_price") or 0) - paid
+    await db.bookings.update_one({"id": bid},
+                                 {"$set": {"total_paid": paid, "pending_amount": pending,
+                                           "updated_at": now_iso()}})
+    booking["total_paid"] = paid
+    booking["pending_amount"] = pending
+    return booking
+
+
+@api.post("/leads/{lid}/booking")
+async def create_booking(lid: str, body: BookingIn, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    existing = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}},
+                                          {"_id": 0})
+    if existing:
+        raise HTTPException(400, "Booking already exists for this lead")
+
+    deal = lead.get("deal") or {}
+    final_price = deal.get("final_deal_price")
+    if not final_price:
+        raise HTTPException(400, "Set Final Deal Price on the deal before booking")
+    if body.booking_amount <= 0:
+        raise HTTPException(400, "Booking amount must be positive")
+    if body.booking_amount > float(final_price):
+        raise HTTPException(400, "Booking amount cannot exceed final deal price")
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    booking_date = body.booking_date or today_str
+    if body.expected_delivery_date < booking_date:
+        raise HTTPException(400, "Expected delivery date must be on or after booking date")
+
+    if body.loan_status and body.loan_status not in LOAN_STATUSES:
+        raise HTTPException(400, "Invalid loan status")
+
+    bid = str(uuid.uuid4())
+    doc = {
+        "id": bid,
+        "lead_id": lid,
+        "branch_id": lead.get("branch_id"),
+        "assigned_to": lead.get("assigned_to"),
+        "customer_name": lead.get("customer_name"),
+        "booking_date": booking_date,
+        "expected_delivery_date": body.expected_delivery_date,
+        "brand_id": body.brand_id or lead.get("brand_id"),
+        "model_id": body.model_id or lead.get("model_id"),
+        "variant_id": body.variant_id or lead.get("variant_id"),
+        "color_id": body.color_id or lead.get("color_id"),
+        "final_deal_price": float(final_price),
+        "booking_amount": float(body.booking_amount),
+        "total_paid": 0.0,
+        "pending_amount": float(final_price),
+        "status": "Pending",
+        "finance_company": body.finance_company,
+        "down_payment": body.down_payment,
+        "emi": body.emi,
+        "loan_status": body.loan_status,
+        "exchange_final_value": body.exchange_final_value,
+        "notes": body.notes,
+        "receipt_file_id": None,
+        "created_by": user["id"],
+        "created_by_name": user["name"],
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.bookings.insert_one(doc)
+    doc.pop("_id", None)
+    # Auto-advance lead stage to Booking if earlier
+    stage_order = {s: i for i, s in enumerate(STAGES)}
+    if stage_order.get(lead.get("stage"), 0) < stage_order["Booking"]:
+        await db.leads.update_one({"id": lid},
+                                  {"$set": {"stage": "Booking", "updated_at": now_iso()}})
+        await add_timeline(lid, "Stage Changed", user,
+                           {"from": lead.get("stage"), "to": "Booking", "via": "booking_created"})
+    await add_timeline(lid, "Booking Created", user,
+                       {"booking_amount": body.booking_amount,
+                        "expected_delivery_date": body.expected_delivery_date})
+    return doc
+
+
+@api.get("/leads/{lid}/booking")
+async def get_booking_for_lead(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    booking = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}},
+                                         {"_id": 0})
+    return booking
+
+
+@api.get("/bookings/{bid}")
+async def get_booking(bid: str, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    return booking
+
+
+@api.put("/bookings/{bid}")
+async def update_booking(bid: str, body: BookingUpdate, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    # Only admin/super_admin can change booking_date or status directly
+    if user["role"] == "sales_executive":
+        for protected in ("booking_date", "status"):
+            updates.pop(protected, None)
+
+    # Business validations
+    new_ba = updates.get("booking_amount", booking["booking_amount"])
+    if new_ba > float(booking["final_deal_price"]):
+        raise HTTPException(400, "Booking amount cannot exceed final deal price")
+    bd = updates.get("booking_date", booking["booking_date"])
+    dd = updates.get("expected_delivery_date", booking["expected_delivery_date"])
+    if dd < bd:
+        raise HTTPException(400, "Expected delivery date must be on or after booking date")
+    if "status" in updates and updates["status"] not in BOOKING_STATUSES:
+        raise HTTPException(400, "Invalid booking status")
+    if "loan_status" in updates and updates["loan_status"] not in LOAN_STATUSES:
+        raise HTTPException(400, "Invalid loan status")
+
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.bookings.update_one({"id": bid}, {"$set": updates})
+    fresh = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    return fresh
+
+
+@api.post("/bookings/{bid}/confirm")
+async def confirm_booking(bid: str, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if booking.get("status") == "Cancelled":
+        raise HTTPException(400, "Booking was cancelled")
+    paid = await _booking_payment_totals(bid)
+    if paid < float(booking["booking_amount"]):
+        raise HTTPException(400, f"Minimum booking amount ₹{booking['booking_amount']} not collected yet (paid ₹{paid})")
+    await db.bookings.update_one({"id": bid}, {"$set": {"status": "Confirmed",
+                                                        "confirmed_at": now_iso(),
+                                                        "confirmed_by": user["id"],
+                                                        "updated_at": now_iso()}})
+    await add_timeline(booking["lead_id"], "Booking Confirmed", user,
+                       {"total_paid": paid, "booking_amount": booking["booking_amount"]})
+    return await db.bookings.find_one({"id": bid}, {"_id": 0})
+
+
+@api.post("/bookings/{bid}/cancel")
+async def cancel_booking(bid: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if user["role"] == "admin" and (not lead or lead.get("branch_id") != user.get("branch_id")):
+        raise HTTPException(403, "Cannot cancel booking outside your branch")
+    await db.bookings.update_one({"id": bid}, {"$set": {"status": "Cancelled",
+                                                        "cancelled_at": now_iso(),
+                                                        "cancelled_by": user["id"],
+                                                        "updated_at": now_iso()}})
+    await add_timeline(booking["lead_id"], "Booking Cancelled", user, {})
+    return await db.bookings.find_one({"id": bid}, {"_id": 0})
+
+
+# ------------------ Payments ------------------
+
+@api.post("/bookings/{bid}/payments")
+async def add_payment(bid: str, body: PaymentIn, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if booking.get("status") == "Cancelled":
+        raise HTTPException(400, "Booking was cancelled")
+    if body.amount <= 0:
+        raise HTTPException(400, "Amount must be positive")
+    if body.mode not in PAYMENT_MODES:
+        raise HTTPException(400, "Invalid payment mode")
+
+    # Check does not exceed final
+    current_paid = await _booking_payment_totals(bid)
+    if current_paid + float(body.amount) > float(booking["final_deal_price"]) + 0.01:
+        raise HTTPException(400, "Total paid would exceed final deal price")
+
+    pid = str(uuid.uuid4())
+    doc = {
+        "id": pid,
+        "booking_id": bid,
+        "lead_id": booking["lead_id"],
+        "amount": float(body.amount),
+        "date": body.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "mode": body.mode,
+        "notes": body.notes,
+        "created_by": user["id"],
+        "created_by_name": user["name"],
+        "created_at": now_iso(),
+    }
+    await db.payments.insert_one(doc)
+    doc.pop("_id", None)
+    fresh = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    fresh = await _recompute_booking(fresh)
+    await add_timeline(booking["lead_id"], "Payment Added", user,
+                       {"amount": body.amount, "mode": body.mode,
+                        "total_paid": fresh["total_paid"]})
+    return {"payment": doc, "booking": fresh}
+
+
+@api.get("/bookings/{bid}/payments")
+async def list_payments(bid: str, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    items = await db.payments.find({"booking_id": bid}, {"_id": 0}).sort("date", -1).to_list(500)
+    return items
+
+
+# ============================================================
+# Vehicle Allotment (Module 6)
+# ============================================================
+
+@api.post("/bookings/{bid}/allotment")
+async def create_allotment(bid: str, body: AllotmentIn, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if booking.get("status") != "Confirmed":
+        raise HTTPException(400, "Booking must be Confirmed before allotment")
+    existing = await db.allotments.find_one({"booking_id": bid}, {"_id": 0})
+    if existing:
+        raise HTTPException(400, "Allotment already exists for this booking")
+    chassis = body.chassis_number.strip().upper()
+    if not chassis:
+        raise HTTPException(400, "Chassis number required")
+    # Unique chassis check
+    dup = await db.allotments.find_one({"chassis_number": chassis}, {"_id": 0})
+    if dup:
+        raise HTTPException(400, f"Chassis number {chassis} already assigned")
+
+    aid = str(uuid.uuid4())
+    doc = {
+        "id": aid,
+        "lead_id": booking["lead_id"],
+        "booking_id": bid,
+        "branch_id": booking.get("branch_id"),
+        "chassis_number": chassis,
+        "engine_number": (body.engine_number or "").strip().upper() or None,
+        "status": "Allotted",
+        "allotted_by": user["id"],
+        "allotted_by_name": user["name"],
+        "allotted_at": now_iso(),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.allotments.insert_one(doc)
+    doc.pop("_id", None)
+
+    # Auto-advance lead to Delivery
+    stage_order = {s: i for i, s in enumerate(STAGES)}
+    if stage_order.get(lead.get("stage"), 0) < stage_order["Delivery"]:
+        await db.leads.update_one({"id": lead["id"]},
+                                  {"$set": {"stage": "Delivery", "updated_at": now_iso()}})
+        await add_timeline(lead["id"], "Stage Changed", user,
+                           {"from": lead.get("stage"), "to": "Delivery", "via": "allotment"})
+    await add_timeline(lead["id"], "Vehicle Allotted", user,
+                       {"chassis_number": chassis, "engine_number": doc["engine_number"]})
+    return doc
+
+
+@api.get("/bookings/{bid}/allotment")
+async def get_allotment(bid: str, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    return await db.allotments.find_one({"booking_id": bid}, {"_id": 0})
+
+
+@api.put("/allotments/{aid}")
+async def update_allotment(aid: str, body: AllotmentUpdate,
+                           user: dict = Depends(require_roles("super_admin", "admin"))):
+    allot = await db.allotments.find_one({"id": aid}, {"_id": 0})
+    if not allot:
+        raise HTTPException(404, "Allotment not found")
+    if user["role"] == "admin" and allot.get("branch_id") != user.get("branch_id"):
+        raise HTTPException(403, "Cannot edit allotment outside your branch")
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "chassis_number" in updates:
+        chassis = updates["chassis_number"].strip().upper()
+        if chassis != allot["chassis_number"]:
+            dup = await db.allotments.find_one({"chassis_number": chassis}, {"_id": 0})
+            if dup:
+                raise HTTPException(400, f"Chassis number {chassis} already assigned")
+        updates["chassis_number"] = chassis
+    if "engine_number" in updates:
+        updates["engine_number"] = (updates["engine_number"] or "").strip().upper() or None
+    if "status" in updates and updates["status"] not in ALLOTMENT_STATUSES:
+        raise HTTPException(400, "Invalid status")
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.allotments.update_one({"id": aid}, {"$set": updates})
+    return await db.allotments.find_one({"id": aid}, {"_id": 0})
+
+
+# ============================================================
+
+
 @api.get("/analytics/deals")
 async def analytics_deals(user: dict = Depends(get_current_user)):
     base: Dict[str, Any] = {}
@@ -1257,6 +1656,11 @@ async def seed_data():
     await db.leads.create_index("branch_id")
     await db.timeline.create_index("lead_id")
     await db.followups.create_index("lead_id")
+    await db.bookings.create_index("lead_id")
+    await db.bookings.create_index("branch_id")
+    await db.payments.create_index("booking_id")
+    await db.allotments.create_index("chassis_number", unique=True)
+    await db.allotments.create_index("booking_id", unique=True)
 
     # Branches
     branch_defs = [
@@ -1462,6 +1866,9 @@ async def get_constants():
         "lost_reasons": LOST_REASONS,
         "deal_loss_reasons": DEAL_LOSS_REASONS,
         "deal_statuses": DEAL_STATUSES,
+        "booking_statuses": BOOKING_STATUSES,
+        "allotment_statuses": ALLOTMENT_STATUSES,
+        "loan_statuses": LOAN_STATUSES,
         "roles": ROLES,
         "config": {
             "discount_approval_threshold": DISCOUNT_APPROVAL_THRESHOLD,

@@ -18,6 +18,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "../components/ui/dialog";
+import BookingSection from "../components/BookingSection";
 import { toast } from "sonner";
 
 const Kv = ({ label, value }) => (
@@ -353,6 +354,7 @@ export default function LeadDetail() {
           <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="followups" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-followups">Follow-ups ({followups.length})</TabsTrigger>
           <TabsTrigger value="deal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-deal">Deal</TabsTrigger>
+          <TabsTrigger value="booking" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-booking">Booking</TabsTrigger>
           <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-documents">Documents ({(lead.documents || []).length})</TabsTrigger>
           <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-timeline">Timeline</TabsTrigger>
         </TabsList>
@@ -719,6 +721,11 @@ export default function LeadDetail() {
             </div>
           </Card>
         </TabsContent>
+
+        <TabsContent value="booking" className="pt-6">
+          <BookingSection lead={lead} constants={constants} onReload={reload} />
+        </TabsContent>
+
 
         <TabsContent value="documents" className="pt-6">
           <Card title="Upload document">
