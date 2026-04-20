@@ -1,0 +1,48 @@
+{
+  "summary": "Backend-only testing of Two-Wheeler Dealership CRM (first iteration). Created pytest suite at /app/backend/tests/backend_test.py with 43 tests covering auth (JWT bearer + cookies), constants/master data, RBAC (super_admin / admin / sales_executive), leads CRUD with round-robin auto-assignment, stage transition validation rules (Deal/Booking/Registration/Lost), follow-ups + counter, timeline events, document upload+download via Emergent Object Storage, user management, and analytics. All 43 tests PASSED against the public REACT_APP_BACKEND_URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/leads/{id}", "issue": "Uses exclude_unset but then filters out values that are None — a field explicitly set to null is silently ignored (e.g., cannot clear assigned_to, payment_mode, notes via PUT). Consider only applying exclude_unset."},
+      {"endpoint": "PUT /api/leads/{id}", "issue": "Timeline event is hard-coded as 'Deal Updated' for every field change — misleading when only notes/priority/etc. change. Rename to 'Lead Updated'."},
+      {"endpoint": "POST /api/leads/{id}/stage (Delivery)", "issue": "Code comment says 'must have passed Booking stage' but no validation is performed — any stage can jump straight to Delivery. Not required by spec but could be tightened."},
+      {"endpoint": "POST /api/leads", "issue": "branch_id validity is checked, but brand_id/model_id/variant_id/color_id are NOT validated against master data — invalid ids silently accepted."},
+      {"endpoint": "POST /api/followups", "issue": "next_followup_date is overwritten with whatever the latest follow-up scheduled_date is (even if older than current). Should only update when scheduled_date > now."},
+      {"endpoint": "GET /api/leads", "issue": "No delete-lead endpoint exists; test leads accumulate. Consider adding DELETE /api/leads/{id} for super_admin."},
+      {"endpoint": "CORS", "issue": "allow_origins uses FRONTEND_URL env, defaulting to http://localhost:3000. If FRONTEND_URL is not set correctly in production, cookies across subdomains may break. Verified it works for current preview URL."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: allow explicit null values in PUT /api/leads/{id} so users can clear fields",
+    "Optional: rename generic 'Deal Updated' timeline event to 'Lead Updated'",
+    "Optional: validate brand_id/model_id/variant_id/color_id references when creating/updating leads",
+    "Optional: add DELETE /api/leads/{id} endpoint for super_admin to cleanup test data"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1148 lines — approaching the 700-line limit. Strongly recommend splitting into modules (auth.py, leads.py, masters.py, files.py, analytics.py, seed.py).",
+    "Stage transition logic has no enforced progression order (besides per-stage prerequisites). A lead can jump from Inquiry → Registration if a document exists. Consider enforcing allowed next stages.",
+    "PUT /api/leads/{id} silently drops fields with value None because of 'if v is not None' filter combined with exclude_unset — this makes clearing a field impossible.",
+    "No rate limiting / brute force protection on /api/auth/login (auth_testing.md playbook recommends lockout after 5 fails). Not implemented.",
+    "access_token has 12h expiry but refresh_token flow has no /api/auth/refresh endpoint — refresh cookie is set but never used.",
+    "put_object/get_object use synchronous requests inside async endpoints — blocks the event loop during uploads/downloads. Use httpx.AsyncClient or run_in_threadpool.",
+    "add_timeline event string 'Deal Updated' fired on any lead PUT is misleading when only e.g. notes change.",
+    "DELETE endpoints for branches/brands/models/variants/colors do not cascade — deleting a brand leaves orphan models/variants and leads pointing to missing ids."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)",
+    "/app/test_reports/pytest/pytest_results.xml (new)",
+    "/app/test_reports/iteration_1.json (new)"
+  ],
+  "success_rate": {"backend": "100% (43/43)", "frontend": "not tested"},
+  "test_credentials": "Read from /app/memory/test_credentials.md — superadmin@dealer.com/super123, admin@dealer.com/admin123, sales1..4@dealer.com/sales123. All seeded and verified working.",
+  "seed_data_creation": "Seed runs automatically on backend startup: 3 branches (Bilimora/Chikhli/Gandevi), 4 brands (Honda/Hero/TVS/Suzuki) with models+variants, 5 colors, 6 users, 5 sample leads. Seed is idempotent and updates password hashes if they do not match.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend single file /app/backend/server.py. MongoDB DB_NAME=twowheeler_crm, vehicle models live in collection 'vehicle_models' (not 'models'). Auth supports Bearer and cookie. All master data and RBAC rules tested and passing. File upload uses live Emergent Object Storage (APP_NAME=twowheeler-crm) — verified working. Round-robin counter stored in db.rr_counters per branch_id. When testing stage changes, remember: Deal needs deal.customer_expected_price + offered_price, Booking needs payment_mode, Registration needs at least one uploaded document, Lost needs lost_reason.",
+  "rca of the issue": "No failing tests — nothing to RCA. Backend implementation is functionally correct per problem statement. Minor concerns listed above are code-quality / edge-case improvements, not bugs."
+}
