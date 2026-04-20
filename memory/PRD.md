@@ -33,25 +33,41 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 10. Role-based data access enforced on every endpoint
 
 ## What's Been Implemented (2026-02-20)
-### Backend (43/43 tests passing)
+### Backend (iter 1: 43/43, iter 2: +14/14 all passing)
 - JWT auth with cookies + Bearer header fallback
 - CRUD for branches, brands, vehicle_models, variants, colors (super_admin only)
 - Leads CRUD with round-robin auto-assignment, RBAC filtering, stage validation
-- Follow-ups, timeline, document upload + download via Emergent Object Storage
-- Users management endpoints
-- Analytics summary endpoint (scoped per role)
-- Constants endpoint (sources, stages, priorities, etc.)
+- **Module 3 — Follow-up & Call Tracking:**
+  - Enhanced follow-up with call_status, customer_response, outcome_tag, lead_temperature, loss_reason, call_duration
+  - Notes + scheduled_date mandatory
+  - 60-second minimum gap to block rapid duplicates (HTTP 429)
+  - Auto-priority sync from lead_temperature
+  - At-risk flag when 2+ missed follow-ups
+  - `/api/tasks` with today / missed / upcoming / at_risk filters
+  - `/api/analytics/performance` per-exec metrics (convert rate, connect rate, missed, at-risk)
+- **Module 4 — Deal & Negotiation:**
+  - Deal fields: ex_showroom_price, final_deal_price, deal_status, approval_required, approval_status, approved_by/at, remarks
+  - Auto-flag approval when discount ≥ ₹5000 threshold
+  - `/api/leads/{id}/deal/request-approval` + `/deal/approve` (admin/super_admin)
+  - Negotiation history auto-logged on any deal-field change
+  - `/api/leads/{id}/negotiations`
+  - Stricter stage validation: Deal needs 1+ Connected follow-up, Booking needs final_deal_price + approval
+  - `/api/analytics/deals` (in-progress, booked, loss reasons, branch deal value)
+- File upload via Emergent Object Storage
 - Idempotent seed on startup
 
 ### Frontend
 - Login page (split-screen hero) with quick demo logins
-- Dashboard with 4 stat cards + source bar chart + stage grid
-- Leads list with full filter bar (source, stage, priority, exec, branch, due-today, search)
-- Lead creation form with section-based layout and conditional Exchange section
-- Lead detail page with tabs (Overview / Follow-ups / Documents / Timeline)
-- Stage change dialog with Lost-reason flow
-- Document upload via typed buttons
+- Dashboard with stat cards, source bar chart, stage grid
+  - **New widgets:** conversion %, missed/upcoming/at-risk (linked to /tasks), deals-in-progress, pending approvals, avg discount, top-execs table
+- Leads list with full filter bar
+- Lead creation form (section-based, conditional)
+- Lead detail page with tabs:
+  - Overview / Follow-ups / **Deal** / Documents / Timeline
+  - Enhanced follow-up form (call status, customer response, outcome, temperature, duration, loss reason)
+  - Deal tab with editable pricing + auto discount calc + request-approval + manager review dialog + negotiation history log
 - Sales Funnel kanban board
+- **Tasks page** with Today / Missed / Upcoming / At-Risk tabs
 - User management (admin/super_admin)
 - Master Data management (super_admin)
 
