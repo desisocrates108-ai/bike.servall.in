@@ -86,6 +86,19 @@ code,
     color: #52525b;
 }
 
+/* Mobile tap targets */
+@media (max-width: 640px) {
+  button, .btn, [role="button"], input, select, textarea {
+    min-height: 40px;
+  }
+  input[type="checkbox"], input[type="radio"] {
+    min-height: 0;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* Priority strips */
 .priority-hot {
     border-left: 4px solid #e11d48;

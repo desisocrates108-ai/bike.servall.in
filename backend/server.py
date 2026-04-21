@@ -52,7 +52,7 @@ LEAD_SOURCES = ["Walk-in", "Tele-in", "Digital Marketing", "Social Media",
                 "WhatsApp", "Email", "Referral", "Offline", "Cold Calling"]
 PRIORITIES = ["Hot", "Warm", "Cold"]
 STAGES = ["Inquiry", "Follow-up", "Interest", "Test Ride", "Deal",
-          "Booking", "Delivery", "Registration", "Feedback", "Lost"]
+          "Booking", "Allotment", "Delivery", "Registration", "Feedback", "Lost"]
 PAYMENT_MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Finance"]
 FOLLOWUP_TYPES = ["Call", "WhatsApp", "Visit", "Test Ride", "Other"]
 CALL_STATUSES = ["Connected", "Not Connected"]
@@ -1436,15 +1436,39 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
     if body.stage not in STAGES:
         raise HTTPException(400, "Invalid stage")
 
-    # Validation rules
+    # --- STRICT FORM-BASED FUNNEL VALIDATION ---
+    # Inquiry → Follow-up: Name + Phone + Vehicle (brand OR model) required
     deal = lead.get("deal") or {}
+    if body.stage == "Follow-up":
+        if not (lead.get("customer_name") and lead.get("phone")):
+            raise HTTPException(400, "Customer name and phone are required before Follow-up")
+        if not (lead.get("brand_id") or lead.get("model_id")):
+            raise HTTPException(400, "Select a vehicle (brand/model) before Follow-up")
+
+    # Follow-up → Interest: at least 1 successful follow-up (Connected + Interested)
+    if body.stage == "Interest":
+        interested = await db.followups.count_documents({
+            "lead_id": lid,
+            "call_status": "Connected",
+            "customer_response": "Interested",
+        })
+        if interested == 0:
+            raise HTTPException(400, "Need at least one Connected follow-up marked 'Interested' before Interest stage")
+
+    # Interest → Deal: brand, model, budget (customer_expected_price) required
     if body.stage == "Deal":
-        if not (deal.get("offered_price") and deal.get("customer_expected_price")):
-            raise HTTPException(400, "Fill customer expected price and offered price before moving to Deal")
+        if not lead.get("brand_id"):
+            raise HTTPException(400, "Brand is required before Deal")
+        if not lead.get("model_id"):
+            raise HTTPException(400, "Model is required before Deal")
+        if not deal.get("customer_expected_price"):
+            raise HTTPException(400, "Customer budget (expected price) is required before Deal")
         # Must have at least one Connected follow-up
         connected = await db.followups.count_documents({"lead_id": lid, "call_status": "Connected"})
         if connected == 0:
             raise HTTPException(400, "Log at least one Connected follow-up before moving to Deal")
+
+    # Deal → Booking: final_deal_price + payment_mode required
     if body.stage == "Booking":
         if not lead.get("payment_mode"):
             raise HTTPException(400, "Set payment mode before Booking")
@@ -1452,7 +1476,29 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
             raise HTTPException(400, "Set Final Deal Price before Booking")
         if deal.get("approval_required") and deal.get("approval_status") != "Approved":
             raise HTTPException(400, "Deal requires manager approval before Booking")
+
+    # Booking → Allotment: booking_amount collected (booking exists with amount > 0)
+    if body.stage == "Allotment":
+        booking = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}}, {"_id": 0})
+        if not booking:
+            raise HTTPException(400, "Create a booking with booking amount before Allotment")
+        if not booking.get("booking_amount") or float(booking.get("booking_amount", 0)) <= 0:
+            raise HTTPException(400, "Booking amount is required before Allotment")
+
+    # Allotment → Delivery: chassis number required
+    if body.stage == "Delivery":
+        allotment = await db.allotments.find_one({"lead_id": lid}, {"_id": 0})
+        if not allotment or not allotment.get("chassis_number"):
+            raise HTTPException(400, "Chassis number (allotment) is required before Delivery")
+
     if body.stage == "Registration":
+        # Payment must be fully paid
+        booking = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}}, {"_id": 0})
+        if booking:
+            paid = float(booking.get("total_paid") or 0)
+            final = float(booking.get("final_deal_price") or 0)
+            if final > 0 and paid < final:
+                raise HTTPException(400, f"Full payment (₹{final}) must be completed before Registration. Paid: ₹{paid}")
         # Module 7 enforcement: all required Registration docs must be Verified
         lead_docs = await db.documents.find({"lead_id": lid, "is_latest": True}, {"_id": 0}).to_list(200)
         missing = _stage_doc_requirements("Registration", lead_docs)

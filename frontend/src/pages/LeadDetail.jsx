@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, API, formatApiErrorDetail } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { priorityClass, stageClass } from "../lib/labels";
 import {
   ArrowLeft, Phone, MapPin, Calendar, Upload, FileText, Clock, User,
-  PhoneCall, CheckCircle2, XCircle, AlertTriangle, ShieldCheck,
+  PhoneCall, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, ChevronRight,
 } from "lucide-react";
+import PageHeader from "../components/PageHeader";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -47,6 +48,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function LeadDetail() {
   const { id } = useParams();
   const nav = useNavigate();
+  const [qs] = useSearchParams();
+  const initialTab = qs.get("tab") || "overview";
   const { user } = useAuth();
   const [lead, setLead] = useState(null);
   const [timeline, setTimeline] = useState([]);
@@ -270,27 +273,37 @@ export default function LeadDetail() {
     "Switched Off": "text-zinc-500",
   };
 
-  return (
-    <div className="p-6 md:p-10 max-w-[1400px]">
-      <button onClick={() => nav("/leads")} className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 mb-4" data-testid="back-to-leads">
-        <ArrowLeft className="w-4 h-4" /> Back to leads
-      </button>
+  // Compute next allowed stages based on strict funnel
+  const allStages = constants?.stages || [];
+  const curIdx = allStages.indexOf(lead.stage);
+  const nextAllowed = lead.stage === "Lost"
+    ? allStages.filter((s) => s !== "Lost")
+    : curIdx >= 0 && curIdx < allStages.length - 1
+      ? [allStages[curIdx + 1] === "Lost" ? allStages[curIdx + 2] : allStages[curIdx + 1], "Lost"].filter(Boolean)
+      : ["Lost"];
 
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
-        <div>
-          <div className="overline mb-2">Lead</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight" data-testid="lead-customer-name">
-            {lead.customer_name}
-          </h1>
-          <div className="mt-3 flex flex-wrap gap-2 text-sm text-zinc-600">
-            <span className="inline-flex items-center gap-1"><Phone className="w-4 h-4" /> <span className="font-mono">{lead.phone}</span></span>
-            {lead.address && <span className="inline-flex items-center gap-1"><MapPin className="w-4 h-4" /> {lead.address}</span>}
-            <span className="inline-flex items-center gap-1"><Calendar className="w-4 h-4" /> Created {new Date(lead.created_at).toLocaleDateString()}</span>
+  return (
+    <>
+      <PageHeader
+        title={lead.customer_name}
+        subtitle={`${lead.phone} · ${lead.stage}`}
+        sticky
+      />
+      <div className="p-4 sm:p-6 md:p-8 max-w-[1400px] mx-auto w-full">
+
+      {/* Stage progress flow */}
+      <StageFlow currentStage={lead.stage} stages={constants?.stages || []} />
+
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6 mt-4">
+        <div className="min-w-0">
+          <div className="mt-1 flex flex-wrap gap-2 text-xs sm:text-sm text-zinc-600">
+            {lead.address && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {lead.address}</span>}
+            <span className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {new Date(lead.created_at).toLocaleDateString()}</span>
             {lead.at_risk && (
-              <span className="inline-flex items-center gap-1 text-rose-700 font-semibold"><AlertTriangle className="w-4 h-4" /> At Risk</span>
+              <span className="inline-flex items-center gap-1 text-rose-700 font-semibold"><AlertTriangle className="w-3.5 h-3.5" /> At Risk</span>
             )}
           </div>
-          <div className="flex gap-2 mt-4 flex-wrap">
+          <div className="flex gap-2 mt-3 flex-wrap">
             <span className={`inline-block px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider ${stageClass(lead.stage)}`} data-testid="lead-stage-badge">{lead.stage}</span>
             <span className={`inline-block px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border ${priorityClass(lead.priority)}`}>{lead.priority}</span>
             <span className="inline-block px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">{lead.source}</span>
@@ -306,11 +319,11 @@ export default function LeadDetail() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           <Dialog open={stageDialog} onOpenChange={setStageDialog}>
             <DialogTrigger asChild>
-              <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="change-stage-btn">
-                Change Stage
+              <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold w-full sm:w-auto" data-testid="change-stage-btn">
+                {nextAllowed.length ? `▶ Next: ${nextAllowed[0]}` : "Change Stage"}
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -321,9 +334,16 @@ export default function LeadDetail() {
                   <Select value={nextStage} onValueChange={setNextStage}>
                     <SelectTrigger className="mt-2" data-testid="next-stage-select"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
-                      {constants?.stages?.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {(nextAllowed.length ? nextAllowed : (constants?.stages || [])).map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {nextAllowed.length > 0 && (
+                    <div className="text-xs text-zinc-500 mt-2">
+                      {stageHint(nextAllowed[0])}
+                    </div>
+                  )}
                 </div>
                 {nextStage === "Lost" && (
                   <>
@@ -353,7 +373,7 @@ export default function LeadDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full" data-testid="stage-flow">
         <TabsList className="rounded-none border-b border-zinc-200 bg-transparent p-0 h-auto w-full justify-start gap-6 overflow-x-auto">
           <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="followups" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-followups">Follow-ups ({followups.length})</TabsTrigger>
@@ -771,6 +791,52 @@ export default function LeadDetail() {
           </div>
         </TabsContent>
       </Tabs>
+      </div>
+    </>
+  );
+}
+
+function stageHint(stage) {
+  const hints = {
+    "Follow-up": "Requires: Customer name, phone, and selected vehicle.",
+    "Interest": "Requires: At least one 'Connected' follow-up with response 'Interested'.",
+    "Test Ride": "Requires: Interest noted. Log the ride as a follow-up.",
+    "Deal": "Requires: Brand, model, and customer budget (expected price).",
+    "Booking": "Requires: Final Deal Price + Payment Mode (and manager approval if discount > threshold).",
+    "Allotment": "Requires: Booking amount collected.",
+    "Delivery": "Requires: Chassis number (vehicle allotted).",
+    "Registration": "Requires: Full payment completed + all required documents verified.",
+    "Feedback": "Requires: Registration number allotted.",
+    "Lost": "Requires: A reason for loss.",
+  };
+  return hints[stage] || "";
+}
+
+function StageFlow({ currentStage, stages }) {
+  if (!stages.length) return null;
+  const ordered = stages.filter((s) => s !== "Lost");
+  const idx = ordered.indexOf(currentStage);
+  return (
+    <div className="bg-white border border-zinc-200 rounded-sm p-3 overflow-x-auto" data-testid="stage-progress">
+      <div className="flex items-center gap-1 min-w-max">
+        {ordered.map((s, i) => {
+          const done = idx > i;
+          const active = idx === i;
+          return (
+            <React.Fragment key={s}>
+              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-[11px] font-bold uppercase tracking-wider whitespace-nowrap ${
+                active ? "bg-brand text-white" :
+                done ? "bg-emerald-100 text-emerald-700" :
+                "bg-zinc-100 text-zinc-500"
+              }`}>
+                {done && <CheckCircle2 className="w-3 h-3" />}
+                {s}
+              </div>
+              {i < ordered.length - 1 && <ChevronRight className="w-3 h-3 text-zinc-300 flex-shrink-0" />}
+            </React.Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -4,11 +4,13 @@
     "tagline": "Sales CRM"
   },
   "nav": {
+    "home": "Home",
     "dashboard": "Dashboard",
     "leads": "Leads",
     "tasks": "Tasks",
     "funnel": "Sales Funnel",
     "new_lead": "New Lead",
+    "whatsapp": "WhatsApp",
     "admin": "Admin",
     "users": "Users",
     "branches": "Branches",
@@ -60,7 +62,10 @@
     "loading": "Loading...",
     "none": "None",
     "total": "Total",
-    "language": "Language"
+    "language": "Language",
+    "see_all": "See all",
+    "quick": "Quick",
+    "back": "Back"
   },
   "lead": {
     "customer_name": "Customer Name",
@@ -105,6 +110,47 @@
     "branch_comparison": "Branch comparison",
     "branch_compare_desc": "Leads, conversions and revenue across all active branches."
   },
+  "dash": {
+    "sales": {
+      "hi": "Hi, {{n}}",
+      "sub": "Your actions for today",
+      "smart": "Smart Actions",
+      "overdue": "{{n}} overdue follow-ups — call now!",
+      "today": "{{n}} follow-ups due today",
+      "my_leads": "My Leads",
+      "hot": "Hot Leads",
+      "hot_list": "Hot leads — act now",
+      "call_now": "Call today's list",
+      "call_now_desc": "Start with the earliest scheduled slot",
+      "new_desc": "Capture a walk-in or phone inquiry"
+    },
+    "admin": {
+      "hi": "Branch Control",
+      "sub": "Performance, funnel drop-offs & team",
+      "at_risk": "At Risk",
+      "deals": "Deals in Progress"
+    },
+    "ceo": {
+      "hi": "Decision Center",
+      "sub": "Branches, insights & loss analysis",
+      "conv": "Conversion %",
+      "deals_progress": "Deals in Progress",
+      "pending": "Pending Approvals",
+      "avg_disc": "Avg Discount",
+      "revenue": "Revenue (₹)",
+      "loss": "Loss analysis",
+      "loss_desc": "{{lost}} leads lost out of {{total}}. Review reasons in lead details.",
+      "at_risk_banner": "Leads at risk of being lost"
+    },
+    "channel": "Leads by source",
+    "channel_perf": "Channel performance",
+    "funnel": "Funnel",
+    "by_stage": "Leads by stage",
+    "no_leads": "No leads yet.",
+    "team": "Team",
+    "top_execs": "Top performing sales executives",
+    "connect_pct": "Connect %"
+  },
   "role": {
     "super_admin": "Super Admin",
     "admin": "Branch Admin",
@@ -123,5 +169,39 @@
     "export_csv": "Export CSV",
     "export_excel": "Export Excel",
     "export_pdf": "Export PDF"
+  },
+  "wa": {
+    "subtitle": "Templates, automation, and bulk campaigns",
+    "templates": "Active Templates",
+    "rules": "Automation Rules",
+    "campaigns": "Campaigns",
+    "send_to_lead": "Send to Lead",
+    "manage_templates": "Manage Templates & Rules",
+    "manage_templates_desc": "Create auto-replies and scheduled triggers",
+    "run_campaign": "Run a Campaign",
+    "run_campaign_desc": "Bulk send to leads by stage, branch or source",
+    "send_from_lead": "Send from a lead",
+    "no_leads": "No leads yet. Add a lead to send a WhatsApp."
+  },
+  "guide": {
+    "back": "Back",
+    "close": "Close",
+    "finish": "Got it",
+    "next": "Next",
+    "skip": "Skip",
+    "dash_title": "This is your home. Key numbers and actions for the day.",
+    "bottom_nav": "Quickly jump between Home, Leads, Tasks, and WhatsApp.",
+    "fab": "Tap this + button to add a new inquiry anywhere.",
+    "leads_title": "All your leads live here. Tap a card to open details.",
+    "leads_search": "Search by customer name or phone instantly.",
+    "leads_new": "Create a new lead with a one-screen form.",
+    "lead_stage": "This is the current funnel stage. Each next stage has mandatory fields.",
+    "stage_flow": "Tap ▶ Next to advance. Missing fields are highlighted in red.",
+    "lead_followups": "Log every call or WhatsApp here — it moves the funnel forward.",
+    "tasks_title": "Your daily action queue. Focus on 'Today' and 'Missed'.",
+    "wa_title": "WhatsApp hub: templates, automation rules, and campaigns.",
+    "sales_tasks": "Check Tasks every morning — never miss a follow-up.",
+    "admin": "Monitor branch performance, funnel drop-offs, and team tracking.",
+    "ceo": "Compare branches, conversion rates, and spot loss reasons."
   }
 }

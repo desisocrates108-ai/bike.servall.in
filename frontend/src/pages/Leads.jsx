@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { priorityClass, priorityStrip, stageClass } from "../lib/labels";
-import { Search, Plus, Filter as FilterIcon } from "lucide-react";
+import { Search, Plus, Filter as FilterIcon, ChevronRight } from "lucide-react";
+import PageHeader from "../components/PageHeader";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import {
@@ -13,6 +15,7 @@ import {
 const ANY = "__ANY__";
 
 export default function Leads() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const nav = useNavigate();
   const [leads, setLeads] = useState([]);
@@ -54,63 +57,64 @@ export default function Leads() {
     setFilters({ source: "", stage: "", priority: "", assigned_to: "", branch_id: "", followup_due_today: false, search: "" });
 
   return (
-    <div className="p-6 md:p-10 max-w-[1500px]">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-        <div>
-          <div className="overline mb-2">All Leads</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight">
-            Leads <span className="text-zinc-400 font-mono">/ {leads.length}</span>
-          </h1>
-        </div>
-        <Link to="/leads/new">
-          <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="new-lead-btn">
-            <Plus className="w-4 h-4 mr-1" /> New Lead
-          </Button>
-        </Link>
-      </div>
+    <>
+      <PageHeader
+        title={t("nav.leads")}
+        subtitle={`${leads.length} ${t("common.total", "total").toLowerCase()}`}
+        showBack={false}
+        sticky
+        right={
+          <Link to="/leads/new" className="hidden sm:block">
+            <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold h-10" data-testid="new-lead-btn">
+              <Plus className="w-4 h-4 mr-1" /> {t("nav.new_lead")}
+            </Button>
+          </Link>
+        }
+      />
+      <div className="p-3 sm:p-6 max-w-[1500px] mx-auto w-full">
 
-      <div className="bg-white border border-zinc-200 rounded-sm p-4 mb-4">
-        <div className="flex flex-wrap gap-3 items-center">
+      <div className="bg-white border border-zinc-200 rounded-sm p-3 mb-3">
+        <div className="flex flex-wrap gap-2 items-center">
           <div className="flex-1 min-w-[220px] relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
             <Input
-              placeholder="Search name or phone..."
+              placeholder={t("common.search")}
               value={filters.search}
               onChange={(e) => setF("search", e.target.value)}
-              className="pl-9 rounded-sm"
+              className="pl-9 rounded-sm h-10"
               data-testid="search-input"
             />
           </div>
 
           <Select value={filters.source || ANY} onValueChange={(v) => setF("source", v)}>
-            <SelectTrigger className="w-[160px] rounded-sm" data-testid="filter-source"><SelectValue placeholder="Source" /></SelectTrigger>
+            <SelectTrigger className="w-[140px] rounded-sm h-10" data-testid="filter-source"><SelectValue placeholder={t("lead.source")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY}>All sources</SelectItem>
+              <SelectItem value={ANY}>{t("common.all")}</SelectItem>
               {constants?.lead_sources?.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
 
           <Select value={filters.stage || ANY} onValueChange={(v) => setF("stage", v)}>
-            <SelectTrigger className="w-[150px] rounded-sm" data-testid="filter-stage"><SelectValue placeholder="Stage" /></SelectTrigger>
+            <SelectTrigger className="w-[130px] rounded-sm h-10" data-testid="filter-stage"><SelectValue placeholder={t("lead.stage")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY}>All stages</SelectItem>
+              <SelectItem value={ANY}>{t("common.all")}</SelectItem>
               {constants?.stages?.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
 
           <Select value={filters.priority || ANY} onValueChange={(v) => setF("priority", v)}>
-            <SelectTrigger className="w-[130px] rounded-sm" data-testid="filter-priority"><SelectValue placeholder="Priority" /></SelectTrigger>
+            <SelectTrigger className="w-[120px] rounded-sm h-10" data-testid="filter-priority"><SelectValue placeholder={t("lead.priority")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY}>Any priority</SelectItem>
+              <SelectItem value={ANY}>{t("common.all")}</SelectItem>
               {constants?.priorities?.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
 
           {(user?.role === "admin" || user?.role === "super_admin") && (
             <Select value={filters.assigned_to || ANY} onValueChange={(v) => setF("assigned_to", v)}>
-              <SelectTrigger className="w-[170px] rounded-sm" data-testid="filter-exec"><SelectValue placeholder="Sales Exec" /></SelectTrigger>
+              <SelectTrigger className="w-[160px] rounded-sm h-10" data-testid="filter-exec"><SelectValue placeholder={t("lead.assigned_to")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ANY}>Any exec</SelectItem>
+                <SelectItem value={ANY}>{t("common.all")}</SelectItem>
                 {users.filter((u) => u.role === "sales_executive").map((u) => (
                   <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                 ))}
@@ -120,49 +124,79 @@ export default function Leads() {
 
           {user?.role === "super_admin" && (
             <Select value={filters.branch_id || ANY} onValueChange={(v) => setF("branch_id", v)}>
-              <SelectTrigger className="w-[150px] rounded-sm" data-testid="filter-branch"><SelectValue placeholder="Branch" /></SelectTrigger>
+              <SelectTrigger className="w-[140px] rounded-sm h-10" data-testid="filter-branch"><SelectValue placeholder={t("lead.branch")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ANY}>All branches</SelectItem>
+                <SelectItem value={ANY}>{t("common.all")}</SelectItem>
                 {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
 
-          <label className="flex items-center gap-2 text-sm ml-auto select-none">
-            <input
-              type="checkbox"
-              checked={filters.followup_due_today}
-              onChange={(e) => setFilters((f) => ({ ...f, followup_due_today: e.target.checked }))}
-              data-testid="filter-due-today"
-            />
-            Follow-up due today
-          </label>
-
-          <Button variant="outline" className="rounded-sm" onClick={clearFilters} data-testid="clear-filters-btn">
-            <FilterIcon className="w-4 h-4 mr-1" /> Clear
+          <Button variant="outline" className="rounded-sm h-10" onClick={clearFilters} data-testid="clear-filters-btn">
+            <FilterIcon className="w-4 h-4 mr-1" /> {t("common.refresh", "Clear")}
           </Button>
         </div>
       </div>
 
-      <div className="bg-white border border-zinc-200 rounded-sm overflow-hidden" data-testid="leads-table">
+      {/* MOBILE: card list */}
+      <div className="sm:hidden space-y-2" data-testid="leads-cards">
+        {loading && <div className="py-8 text-center text-zinc-400 text-sm">{t("common.loading")}</div>}
+        {!loading && leads.length === 0 && (
+          <div className="py-12 text-center text-zinc-400 text-sm">No leads match the filters.</div>
+        )}
+        {leads.map((l) => (
+          <Link
+            key={l.id}
+            to={`/leads/${l.id}`}
+            className={`block bg-white border rounded-sm p-3 active:bg-zinc-50 ${priorityStrip(l.priority)}`}
+            data-testid={`lead-row-${l.id}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm truncate">{l.customer_name}</div>
+                <div className="text-xs text-zinc-500 font-mono mt-0.5">{l.phone}</div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${stageClass(l.stage)}`}>
+                    {l.stage}
+                  </span>
+                  <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border ${priorityClass(l.priority)}`}>
+                    {l.priority}
+                  </span>
+                  <span className="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-600">
+                    {l.source}
+                  </span>
+                </div>
+                <div className="text-xs text-zinc-500 mt-1.5 flex flex-wrap gap-x-3">
+                  {userMap[l.assigned_to]?.name && <span>{userMap[l.assigned_to].name}</span>}
+                  {l.next_followup_date && <span className="font-mono">→ {l.next_followup_date}</span>}
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-zinc-400 mt-2 flex-shrink-0" />
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* DESKTOP: table */}
+      <div className="hidden sm:block bg-white border border-zinc-200 rounded-sm overflow-hidden" data-testid="leads-table">
         <div className="overflow-x-auto">
           <table className="data-table w-full">
             <thead>
               <tr>
                 <th></th>
-                <th>Customer</th>
-                <th>Phone</th>
-                <th>Source</th>
-                <th>Stage</th>
-                <th>Sales Exec</th>
-                <th>Branch</th>
-                <th>Follow-up</th>
-                <th>Priority</th>
+                <th>{t("common.name")}</th>
+                <th>{t("common.phone")}</th>
+                <th>{t("lead.source")}</th>
+                <th>{t("lead.stage")}</th>
+                <th>{t("lead.assigned_to")}</th>
+                <th>{t("lead.branch")}</th>
+                <th>{t("lead.followups")}</th>
+                <th>{t("lead.priority")}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={9} className="py-8 text-center text-zinc-400">Loading...</td></tr>
+                <tr><td colSpan={9} className="py-8 text-center text-zinc-400">{t("common.loading")}</td></tr>
               )}
               {!loading && leads.length === 0 && (
                 <tr><td colSpan={9} className="py-12 text-center text-zinc-400">No leads match the filters.</td></tr>
@@ -172,7 +206,7 @@ export default function Leads() {
                   key={l.id}
                   onClick={() => nav(`/leads/${l.id}`)}
                   className={`cursor-pointer ${priorityStrip(l.priority)}`}
-                  data-testid={`lead-row-${l.id}`}
+                  data-testid={`lead-row-desk-${l.id}`}
                 >
                   <td className="w-1"></td>
                   <td className="font-semibold">{l.customer_name}</td>
@@ -197,6 +231,7 @@ export default function Leads() {
           </table>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

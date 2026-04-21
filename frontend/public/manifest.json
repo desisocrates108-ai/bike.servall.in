@@ -1,0 +1,25 @@
+{
+  "short_name": "Servall CRM",
+  "name": "Servall CRM — Two-Wheeler Sales",
+  "description": "Mobile sales assistant for two-wheeler dealerships",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f4f5",
+  "theme_color": "#ED1C24",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

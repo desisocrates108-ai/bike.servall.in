@@ -16,6 +16,7 @@ import Campaigns from "./pages/Campaigns";
 import Automation from "./pages/Automation";
 import Branches from "./pages/Branches";
 import AuditLogs from "./pages/AuditLogs";
+import Whatsapp from "./pages/Whatsapp";
 import { Toaster } from "sonner";
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
             <Route path="/leads/:id" element={<ProtectedRoute><LeadDetail /></ProtectedRoute>} />
             <Route path="/funnel" element={<ProtectedRoute><Funnel /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+            <Route path="/whatsapp" element={<ProtectedRoute><Whatsapp /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute roles={["super_admin", "admin"]}><UsersPage /></ProtectedRoute>} />
             <Route path="/branches" element={<ProtectedRoute roles={["super_admin", "admin"]}><Branches /></ProtectedRoute>} />
             <Route path="/audit-logs" element={<ProtectedRoute roles={["super_admin", "admin"]}><AuditLogs /></ProtectedRoute>} />

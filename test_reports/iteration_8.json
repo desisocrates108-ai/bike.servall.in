@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 8 — Servall CRM (mobile-first refactor + strict funnel + PWA) tested end-to-end. Backend: 16/16 pytest (/app/backend/tests/test_strict_funnel.py) pass — STAGES ordering correct (…Booking,Allotment,Delivery…); super_admin login returns access_token+user; strict funnel gates verified: Follow-up requires brand/model, Interest requires Connected+Interested follow-up, Deal requires customer_expected_price AND a Connected follow-up, Booking requires payment_mode+final_deal_price, Allotment requires a bookings row with amount>0, Delivery requires chassis_number (allotment), Registration requires full payment + verified docs, Lost requires lost_reason. PWA: /manifest.json, /service-worker.js, /icons/icon-192.png, /icons/icon-512.png all 200; index.html includes <link rel=manifest>, theme-color #ED1C24 and viewport-fit=cover. Frontend (Playwright, mobile 390x844 + desktop 1280x800): login with superadmin@dealer.com/super123 reaches /dashboard (actual testids login-email-input/login-password-input/login-submit-button — close equivalents of spec); Dashboard renders PageHeader('Decision Center') + super_admin decision variant + branch-compare-card + ceo-insights; all 4 bottom-nav testids exist+visible; FAB fab-new-lead, guide-btn, mobile-menu-btn, lang-en, lang-gu all present; /leads mobile shows leads-cards with lead-row-<id>; desktop shows leads-table with lead-row-desk-<id> and bottom-nav hidden; /tasks renders tab-today/tab-missed/tab-upcoming/tab-at_risk and tab clicks update URL (?kind=missed/upcoming/at_risk); /whatsapp hub shows Template/Rule/Campaign copy; LeadDetail shows data-testid=stage-progress with '▶ Next: Test Ride' button and page-back-btn that returns to /leads; guide-btn click opens react-joyride tooltip+floater; hamburger opens role=dialog drawer; EN/GU toggle works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Layout mobile bottom-nav (Tasks + WhatsApp tabs)",
+        "issue": "On mobile viewport (390x844) in the preview URL, the Emergent 'Made with Emergent' badge (fixed bottom-right) overlaps and intercepts taps on bottom-nav-tasks and bottom-nav-whatsapp. elementFromPoint at the center of bottom-nav-tasks returns a <P> with innerText 'Made with Emergent' → real-user taps on Tasks or WhatsApp hit the watermark, not the NavLink. JS-level .click() and direct URL navigation work fine; only visual hit-testing is blocked. bottom-nav-leads and bottom-nav-home are unaffected.",
+        "selector": "[data-testid='bottom-nav-tasks'], [data-testid='bottom-nav-whatsapp']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "LeadDetail (mobile)", "issues": ["Radix DialogContent emits console warning: 'DialogContent requires a DialogTitle for the component to be accessible'. Wrap dialog title with VisuallyHidden or add DialogTitle to stage-change dialog."]},
+      {"screen": "PageHeader title truncation", "issues": ["Stat-card labels on mobile dashboard are truncated ('CONVERSIO…', 'DEALS IN P…', 'PENDING A…', 'AVG DISCO…') — consider shorter labels or two-line wrapping on 390px width."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_strict_funnel.py",
+    "/app/test_reports/pytest/pytest_results_iter8.xml"
+  ],
+  "action_items": [
+    "FIX (HIGH): Raise z-index of mobile bottom-nav container above Emergent preview watermark, OR add right-side padding so the last two bottom-nav icons clear the badge. e.g., on <nav className='... fixed bottom-0 left-0 right-0 z-[60] ...'> and add bottom padding to page content so the watermark doesn't sit on top. This only affects the preview URL, but users testing the PWA in preview cannot access Tasks/WhatsApp via bottom-nav.",
+    "Add DialogTitle (wrap with Radix VisuallyHidden if not visually needed) to the Change-Stage dialog on LeadDetail to satisfy a11y.",
+    "Shorten stat-card labels on Dashboard mobile (<391px) so 'Conversion %', 'Deals in Progress', 'Pending Approvals', 'Avg Discount' don't truncate.",
+    "Spec listed login testids 'email-input/password-input/submit' — actual are 'login-email-input/login-password-input/login-submit-button'. These are close equivalents (acceptable) but main agent should ensure the spec + README stay in sync with real testids."
+  ],
+  "critical_code_review_comments": [
+    "server.py at 4114 lines — splitting debt continues; now includes full strict-funnel stage gating (lines 1429-1510) alongside Modules 3-14 logic.",
+    "Stage gate for Registration double-checks full payment AND verified docs — but the message 'Full payment (₹X) must be completed before Registration' will not mention doc requirement; users could fix payment then fail again on docs. Consider a single aggregated response listing both blockers.",
+    "Follow-up 60s rate-limit per lead is a good business guard, but there is no explicit FOLLOWUP_COOLDOWN_SECONDS constant and it surfaces as a 429 with free-text message; consider structured {code: 'followup_cooldown', seconds_remaining: N} so UI can show a countdown.",
+    "Layout.jsx BottomTab uses NavLink children function pattern — data-testid lands on the <a>, which is correct. However the 'Made with Emergent' badge injected by preview overrides hit-testing on last two tabs — app-level fix: set z-[60] on the bottom nav container or avoid fixed-bottom right=0 conflict.",
+    "GuideButton auto-starts once per browser (localStorage 'guide_seen'). On CI/Playwright this may pop on first run and flake tests — consider also gating on a NODE_ENV check or reading ?skipTour=1 from URL for test automation.",
+    "PWA service-worker.js is served (200) but only registered in production NODE_ENV — dev/preview is NODE_ENV=production here so SW likely registers. Verify cache strategy doesn't cache /api/* responses."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_strict_funnel.py (new, 16 tests all passing — strict funnel gates + PWA asset serving)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 strict-funnel + PWA asset tests)",
+    "frontend": "~95% — all role-based UI, mobile/desktop responsive, lead funnel UI, guide tour, hamburger, lang toggle verified; one HIGH issue: Emergent watermark overlays bottom-nav Tasks/WhatsApp on mobile preview."
+  },
+  "test_credentials": "superadmin@dealer.com/super123 (super_admin), admin@dealer.com/admin123 (admin Bilimora), sales1@dealer.com/sales123 (sales_exec Bilimora) — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "test_strict_funnel.py creates ~10 TEST_Funnel_* leads per run (all in Bilimora, Honda Activa 6G). One lead progressed to 'Lost'. Follow-ups attached where needed. No cleanup (no DELETE /leads endpoint); safe because data is prefixed and branch metrics already reflect these from prior iterations.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression files cumulative: backend_test.py, test_modules_3_4/5_6/7_8/9_10/11_12/13_14.py, and new test_strict_funnel.py. Follow-up endpoint has a 60-sec cooldown per lead — always use a fresh lead for each follow-up in unit tests. Login testids are login-email-input/login-password-input/login-submit-button (spec used short names). Mobile bottom-nav testids: bottom-nav-home/leads/tasks/whatsapp. FAB testid fab-new-lead is mobile-only. Tasks tab testids: tab-today/tab-missed/tab-upcoming/tab-at_risk (note underscore in at_risk). LeadDetail has data-testid=stage-progress and 'Next:' button opens a Dialog. PWA manifest + service-worker + icons all served at root.",
+  "rca of the issue": "HIGH bottom-nav-tasks/whatsapp tap interception on mobile preview: Emergent-injected 'Made with Emergent' badge is position:fixed bottom-right and occupies the same screen area (~x=290-390, y=770-844 on 390x844 viewport) as the last two bottom-nav tabs. Playwright elementFromPoint confirmed the <P> element is on top. JS .click() and URL-based nav work, so the React Router + NavLink is not broken. Fix options: (1) bump z-index of the mobile bottom-nav container to beat the watermark; (2) reserve 60-80px right-padding on the bottom-nav on preview builds; (3) reduce bottom-nav to 3 tabs on mobile with a 'more' menu. Recommended option (1): add `z-[60]` (or `z-50`) to the <nav> wrapper in Layout.jsx around line 188."
+}
