@@ -20,6 +20,7 @@ import Whatsapp from "./pages/Whatsapp";
 import BranchDetail from "./pages/BranchDetail";
 import UserDetail from "./pages/UserDetail";
 import Contacts from "./pages/Contacts";
+import Reports from "./pages/Reports";
 import { Toaster } from "sonner";
 
 function App() {
@@ -39,6 +40,7 @@ function App() {
             <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
             <Route path="/whatsapp" element={<ProtectedRoute><Whatsapp /></ProtectedRoute>} />
             <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute roles={["super_admin", "admin"]}><Reports /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute roles={["super_admin"]}><UsersPage /></ProtectedRoute>} />
             <Route path="/branches" element={<ProtectedRoute roles={["super_admin"]}><Branches /></ProtectedRoute>} />
             <Route path="/branches/:id" element={<ProtectedRoute><BranchDetail /></ProtectedRoute>} />

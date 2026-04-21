@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 11 (Servall CRM CEO+SM compliance) validated. Backend pytest 7/7 PASS at /app/backend/tests/test_iter11_compliance.py — (1) /api/branches returns all 5 required branches {Bilimora, Chikhli, Amalsad, Vansda, Gandevi}; (2) /api/wa-templates seeds 3 defaults {'Inquiry — send catalog','Delivery — thank you','Feedback — request'}; (3) /api/automation-rules seeds 3 defaults with events {inquiry_created, delivery_completed, feedback_reminder}; (4) POST /api/leads/{id}/followups with {call_recording_url,call_recording_filename,call_duration} persists all three; (5) PUT /api/leads/{id} with {registration:{status,number_allotted,rto_office,plate_fitted}} saves and GET returns identical object; (6)(7) /manifest.json + /service-worker.js = 200. Frontend Playwright (desktop 1280x800 + mobile 390x844): super_admin /reports fully renders — page-header, reports-branch-filter (options exactly [All branches, Amalsad, Bilimora, Chikhli, Gandevi, Vansda]), rep-source w/ 'Conv %' column, rep-loss, rep-funnel, rep-behaviour, rep-brand, rep-model, rep-exec (14 exec rows; first row click → /users/:id confirmed), rep-branch. Sidebar nav-reports count=1 for super+admin, =0 for sales. Admin /reports renders restricted view (reports-branch-filter=0, rep-branch=0) — correct. Sales /reports shows 'You don't have permission to view this page.' Registration tab on /leads/:id: tab-registration + registration-section + reg-status-select + reg-rto + reg-number-allotted + reg-allotted-date + reg-plate-fitted + reg-plate-date + reg-save-btn + reg-status-badge all present; saved {status:Allotted, rto:'Valsad RTO', number:'GJ-15-TZ-9988', date:2026-05-10}, reloaded page, values retained. Regression: mobile bottom-nav for sales has home/leads/tasks/contacts (no whatsapp) = correct; /contacts still renders 182 contact-cards.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/reports (super_admin)", "issues": ["Switching reports-branch-filter to any non-Bilimora branch (Amalsad/Chikhli/Vansda/Gandevi) drops rep-exec rows to 0 — technically correct because all 213 seeded leads live in Bilimora (per iter10), but UX has no empty-state copy. Consider adding a 'No data for this branch' helper message inside each card when filter yields zero leads so users aren't confused."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_compliance.py",
+    "/app/test_reports/pytest/pytest_results_iter11.xml"
+  ],
+  "action_items": [
+    "NONE blocking. Optional UX: empty-state copy on /reports cards when branch filter returns zero leads.",
+    "(Carry-over, still unresolved from iter10) HIGH: Global-search dropdown results are rendered under the sticky PageHeader z-20 on desktop — clicks on global-search-item-<id> do not navigate. Not retested this iteration since it is unrelated to iteration-11 scope.",
+    "(Carry-over, iter10) MEDIUM: POST /api/users without phone → 500 (non-sparse unique index on users.phone)."
+  ],
+  "critical_code_review_comments": [
+    "Reports.jsx aggregates everything client-side from /api/leads — fine for 213-lead seed, but will become a bottleneck at 5k+ leads. Plan a /api/reports/summary server-side aggregation endpoint before scale.",
+    "Branch filter on /reports honours only the rep-exec/rep-source/etc aggregations; it does NOT refetch or re-scope the raw leads list. Verify the single /api/leads call happens with a branch param (or client filter) so non-super_admin pages don't leak cross-branch aggregates.",
+    "RegistrationSection (LeadDetail.jsx L960+) correctly persists registration object via PUT /api/leads/{id}. Good testid coverage. Minor: plate_fitted_date field is enabled only when plate_fitted=true — UX is clean, but the backend should reject a plate_fitted_date if plate_fitted is false to keep data consistent.",
+    "Seed for branches/wa_templates/automation_rules is idempotent (checked via count==0 before insert) — good. Ensure same idempotency guard is in place before any hotfix/reseed runs.",
+    "2 matching nodes for data-testid='global-search-input' (desktop + mobile sheet) both mount simultaneously on desktop. Gate the mobile sheet render behind an explicit isMobile/sm:hidden to avoid test-strict-mode collisions and duplicate DOM."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter11_compliance.py (NEW — 7 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 iter-11 compliance tests)",
+    "frontend": "100% on iter-11 scope — /reports layout, RBAC gating, branch filter, exec-row nav, registration tab save+persist, sidebar nav-reports, no regressions"
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123, sales1@dealer.com/sales123 — from /app/memory/test_credentials.md.",
+  "seed_data_creation": "No new seed rows. Tests reuse existing seeded leads; registration and followup writes are performed on an existing lead id and left in place (non-destructive).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration-11 regression base now includes /app/backend/tests/test_iter11_compliance.py. Key new testids: nav-reports, reports-branch-filter (SELECT w/ options: All branches,Amalsad,Bilimora,Chikhli,Gandevi,Vansda), rep-source/rep-loss/rep-funnel/rep-behaviour/rep-brand/rep-model/rep-exec/rep-branch, rep-source-row-{label}, rep-exec-row-{id} (clickable -> /users/:id), tab-registration, registration-section, reg-status-select (shadcn), reg-rto, reg-number-allotted, reg-allotted-date, reg-plate-fitted, reg-plate-date, reg-save-btn, reg-status-badge. Backend contract: followup accepts call_recording_url+call_recording_filename+call_duration (requires scheduled_date); lead PUT accepts registration object with {status, number_allotted, rto_office, number_allotted_date, plate_fitted, plate_fitted_date}. Seeds: 5 branches, 3 WA templates, 3 automation rules — all idempotent. Note: all 213 seeded leads are in Bilimora, so filtering reports to another branch yields 0 rows (expected).",
+  "rca of the issue": "No iter-11 bug found. For the carry-over global-search dropdown z-index issue (iter10), the root cause remains: GlobalSearch results container sits at z-index lower than the sticky PageHeader's z-20 bounding box; clicks on global-search-item-<id> on desktop are intercepted by the page-header subtree. Mitigation: raise the dropdown container to z-30 or portal it to document.body."
+}

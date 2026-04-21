@@ -456,6 +456,7 @@ export default function LeadDetail() {
             <TabsTrigger value="exchange" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-exchange">Exchange</TabsTrigger>
           )}
           <TabsTrigger value="delivery" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-delivery">Delivery</TabsTrigger>
+          <TabsTrigger value="registration" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-registration">Registration</TabsTrigger>
           <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-documents">Documents ({(lead.documents || []).length})</TabsTrigger>
           <TabsTrigger value="whatsapp" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-timeline">Timeline</TabsTrigger>
@@ -836,6 +837,10 @@ export default function LeadDetail() {
           <DeliverySection lead={lead} constants={constants} onReload={reload} />
         </TabsContent>
 
+        <TabsContent value="registration" className="pt-6">
+          <RegistrationSection lead={lead} onReload={reload} />
+        </TabsContent>
+
         <TabsContent value="documents" className="pt-6">
           <DocumentsSection lead={lead} constants={constants} onReload={reload} />
         </TabsContent>
@@ -910,6 +915,127 @@ function StageFlow({ currentStage, stages }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function RegistrationSection({ lead, onReload }) {
+  const reg = lead?.registration || {};
+  const [saving, setSaving] = React.useState(false);
+  const [form, setForm] = React.useState({
+    status: reg.status || "Pending",
+    rto_office: reg.rto_office || "",
+    number_allotted: reg.number_allotted || "",
+    number_allotted_date: reg.number_allotted_date || "",
+    plate_fitted: reg.plate_fitted || false,
+    plate_fitted_date: reg.plate_fitted_date || "",
+    notes: reg.notes || "",
+  });
+  React.useEffect(() => {
+    const r = lead?.registration || {};
+    setForm({
+      status: r.status || "Pending",
+      rto_office: r.rto_office || "",
+      number_allotted: r.number_allotted || "",
+      number_allotted_date: r.number_allotted_date || "",
+      plate_fitted: !!r.plate_fitted,
+      plate_fitted_date: r.plate_fitted_date || "",
+      notes: r.notes || "",
+    });
+  }, [lead?.id]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/leads/${lead.id}`, { registration: form });
+      toast.success("Registration info saved");
+      onReload?.();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+    }
+    setSaving(false);
+  };
+
+  const Field = ({ label, children, testid }) => (
+    <div data-testid={testid}>
+      <Label className="overline">{label}</Label>
+      <div className="mt-2">{children}</div>
+    </div>
+  );
+
+  const statusTone = {
+    "Pending": "bg-zinc-100 text-zinc-700",
+    "Allotted": "bg-blue-100 text-blue-700",
+    "Plate Fitted": "bg-amber-100 text-amber-700",
+    "Done": "bg-emerald-100 text-emerald-700",
+  }[form.status] || "bg-zinc-100 text-zinc-700";
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 max-w-[1200px]">
+      <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-sm p-5 space-y-4" data-testid="registration-section">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="overline">RTO Registration</div>
+            <div className="font-display text-lg font-bold mt-1">Track number allotment & plate fitting</div>
+          </div>
+          <span className={`inline-block px-2.5 py-1 rounded-sm text-xs font-bold uppercase ${statusTone}`} data-testid="reg-status-badge">
+            {form.status}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Status" testid="reg-status-field">
+            <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+              <SelectTrigger className="rounded-sm" data-testid="reg-status-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {["Pending", "Allotted", "Plate Fitted", "Done"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="RTO Office">
+            <Input value={form.rto_office} onChange={(e) => setForm((f) => ({ ...f, rto_office: e.target.value }))} className="rounded-sm" placeholder="e.g. Valsad RTO (GJ-15)" data-testid="reg-rto" />
+          </Field>
+          <Field label="Number Allotted">
+            <Input value={form.number_allotted} onChange={(e) => setForm((f) => ({ ...f, number_allotted: e.target.value }))} className="rounded-sm font-mono uppercase" placeholder="GJ-15-AB-1234" data-testid="reg-number-allotted" />
+          </Field>
+          <Field label="Number Allotted Date">
+            <Input type="date" value={form.number_allotted_date} onChange={(e) => setForm((f) => ({ ...f, number_allotted_date: e.target.value }))} className="rounded-sm" data-testid="reg-allotted-date" />
+          </Field>
+          <Field label="Plate Fitted">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.plate_fitted}
+                onChange={(e) => setForm((f) => ({ ...f, plate_fitted: e.target.checked }))}
+                data-testid="reg-plate-fitted"
+              />
+              Yes, number plate physically fitted
+            </label>
+          </Field>
+          <Field label="Plate Fitted Date">
+            <Input type="date" value={form.plate_fitted_date} onChange={(e) => setForm((f) => ({ ...f, plate_fitted_date: e.target.value }))} className="rounded-sm" disabled={!form.plate_fitted} data-testid="reg-plate-date" />
+          </Field>
+        </div>
+
+        <Field label="Notes">
+          <Textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="rounded-sm" placeholder="Any registration remarks..." rows={3} />
+        </Field>
+
+        <div className="pt-2">
+          <Button onClick={save} disabled={saving} className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="reg-save-btn">
+            {saving ? "Saving..." : "Save Registration Info"}
+          </Button>
+        </div>
+      </div>
+
+      <aside className="bg-white border border-zinc-200 rounded-sm p-5 text-sm">
+        <div className="overline mb-2">Quick Reference</div>
+        <div className="text-zinc-600 space-y-2">
+          <p>Move stage to <b>Registration</b> once payment is cleared.</p>
+          <p>Update the number once RTO allots; mark plate fitted when physically delivered to customer.</p>
+          <p>Transition to <b>Feedback</b> stage after plate is fitted.</p>
+        </div>
+      </aside>
     </div>
   );
 }

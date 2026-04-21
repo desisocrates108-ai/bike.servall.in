@@ -305,6 +305,18 @@ class FinanceInfo(BaseModel):
     tenure: Optional[int] = None
 
 
+class RegistrationInfo(BaseModel):
+    status: Optional[str] = None  # Pending / Allotted / Plate Fitted / Done
+    rto_office: Optional[str] = None
+    number_allotted: Optional[str] = None  # e.g. GJ-15-AB-1234
+    number_allotted_date: Optional[str] = None  # YYYY-MM-DD
+    plate_fitted: Optional[bool] = None
+    plate_fitted_date: Optional[str] = None
+    fitness_certificate_url: Optional[str] = None
+    registration_copy_url: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class LeadCreate(BaseModel):
     customer_name: str
     phone: str
@@ -348,6 +360,7 @@ class LeadUpdate(BaseModel):
     deal: Optional[DealInfo] = None
     payment_mode: Optional[str] = None
     finance: Optional[FinanceInfo] = None
+    registration: Optional[RegistrationInfo] = None
     next_followup_date: Optional[str] = None
     next_followup_time: Optional[str] = None
     next_followup_type: Optional[str] = None
@@ -373,6 +386,8 @@ class FollowupIn(BaseModel):
     loss_reason: Optional[str] = None
     loss_reason_text: Optional[str] = None
     call_duration: Optional[int] = None  # seconds
+    call_recording_url: Optional[str] = None  # object storage URL
+    call_recording_filename: Optional[str] = None
 
 
 class DealApproveIn(BaseModel):
@@ -1624,6 +1639,8 @@ async def add_followup(lid: str, body: FollowupIn, user: dict = Depends(get_curr
         "loss_reason": body.loss_reason,
         "loss_reason_text": body.loss_reason_text,
         "call_duration": body.call_duration,
+        "call_recording_url": body.call_recording_url,
+        "call_recording_filename": body.call_recording_filename,
         "created_by": user["id"],
         "created_by_name": user["name"],
         "created_at": now_iso(),
@@ -3800,6 +3817,8 @@ async def seed_data():
     branch_defs = [
         {"name": "Bilimora", "code": "BLM", "city": "Bilimora"},
         {"name": "Chikhli", "code": "CHK", "city": "Chikhli"},
+        {"name": "Amalsad", "code": "AMD", "city": "Amalsad"},
+        {"name": "Vansda", "code": "VNS", "city": "Vansda"},
         {"name": "Gandevi", "code": "GND", "city": "Gandevi"},
     ]
     branches = {}
@@ -4036,6 +4055,65 @@ async def seed_data():
                 "actor_name": sales_exec["name"] if sales_exec else "System",
                 "created_at": now_iso(),
             })
+
+    # Seed default WhatsApp templates + automation rules (idempotent)
+    default_templates = [
+        {
+            "key_name": "Inquiry — send catalog",
+            "body": "Hi {{customer_name}}, thanks for your interest at Servall! View our catalog: https://servall.com/catalog",
+            "category": "inquiry",
+        },
+        {
+            "key_name": "Delivery — thank you",
+            "body": "Congratulations {{customer_name}}! Your vehicle has been delivered. Thank you for choosing Servall — safe & happy rides! 🏍️",
+            "category": "delivery",
+        },
+        {
+            "key_name": "Feedback — request",
+            "body": "Hi {{customer_name}}, we'd love your feedback on your recent purchase. Reply here or visit: https://servall.com/feedback",
+            "category": "feedback",
+        },
+    ]
+    tpl_by_name = {}
+    for td in default_templates:
+        existing = await db.wa_templates.find_one({"name": td["key_name"]}, {"_id": 0})
+        if existing:
+            tpl_by_name[td["key_name"]] = existing["id"]
+        else:
+            tid = str(uuid.uuid4())
+            await db.wa_templates.insert_one({
+                "id": tid,
+                "name": td["key_name"],
+                "category": td["category"],
+                "message_type": "text",
+                "body": td["body"],
+                "active": True,
+                "created_at": now_iso(),
+            })
+            tpl_by_name[td["key_name"]] = tid
+
+    default_rules = [
+        {"name": "Auto-send catalog on inquiry", "event": "inquiry_created", "template_name": "Inquiry — send catalog", "delay": 0},
+        {"name": "Thank you on delivery", "event": "delivery_completed", "template_name": "Delivery — thank you", "delay": 0},
+        {"name": "Feedback reminder", "event": "feedback_reminder", "template_name": "Feedback — request", "delay": 0},
+    ]
+    for rd in default_rules:
+        existing = await db.automation_rules.find_one({"name": rd["name"]}, {"_id": 0})
+        if existing:
+            continue
+        tid = tpl_by_name.get(rd["template_name"])
+        if not tid:
+            continue
+        await db.automation_rules.insert_one({
+            "id": str(uuid.uuid4()),
+            "name": rd["name"],
+            "event": rd["event"],
+            "conditions": {},
+            "template_id": tid,
+            "delay_minutes": rd["delay"],
+            "active": True,
+            "created_at": now_iso(),
+        })
 
 
 @app.on_event("startup")

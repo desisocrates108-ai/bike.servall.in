@@ -21,6 +21,7 @@ import {
   X,
   Plus,
   Contact as ContactIcon,
+  BarChart3,
 } from "lucide-react";
 import LanguageToggle from "./LanguageToggle";
 import GlobalSearch from "./GlobalSearch";
@@ -90,6 +91,9 @@ export default function Layout({ children }) {
         {isAdmin && (
           <div data-testid="admin-section">
             <div className="overline mt-6 mb-2 px-4">{t("nav.admin")}</div>
+            <NavLink to="/reports" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-reports">
+              <BarChart3 className="w-4 h-4" strokeWidth={1.75} /> {t("nav.reports")}
+            </NavLink>
             {/* Super-admin only: Users, Branches, Audit Logs */}
             {isSuper && (
               <>
