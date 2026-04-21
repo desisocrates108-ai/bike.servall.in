@@ -132,3 +132,20 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 1. Collect user feedback on Modules 13 & 14 (users/branches/audit UX)
 2. Swap WhatsApp MOCK with Twilio/WATI when API keys ready
 3. Implement P1 items (kanban drag-and-drop, lead CSV export, advanced analytics)
+
+### 2026-04-21 — Phase 1: Servall CRM Branding & Bilingual Support (EN ↔ GU)
+- **Brand rename:** "TORQUE Sales CRM" → **Servall CRM** (login page, sidebar, browser tab title)
+- **Brand color:** Primary theme switched to `#ED1C24` (red) via `.bg-brand` / `.bg-brand-dark` CSS utilities
+- All primary CTA buttons (14+ files) migrated via global sed from `bg-zinc-900 hover:bg-zinc-800` → `bg-brand hover:bg-brand-dark`
+- **i18n engine:** `i18next` + `react-i18next` + browser-language-detector wired in `src/i18n/`
+  - `en.json` + `gu.json` with nested keys: brand/nav/login/common/lead/dashboard/role/reports
+  - Language preference persisted in `localStorage` under `servall_lang`
+- **Language toggle** (EN / ગુ) top-right on every page including login
+- Login, Sidebar nav, Dashboard stat labels + branch comparison card fully translated
+
+## Roadmap (Phases 2-6 — confirmed scope)
+1. **Phase 2 — Module 16 (Master Data Dynamic)**: add status/ex_showroom_price/priority_tag/availability to brands/models/variants/colors
+2. **Phase 3 — Modules 19 & 20 (Customer Profile + Interest Tracking)**: rule-based (+ ML-based later) scoring engine — buying_capacity, engagement, conversion_probability, lead_heat, drop_risk, closing_probability; auto-tags (New/Repeat/High-Value/Cold); multi-interest support; smart next-action suggestions
+4. **Phase 4 — Module 15 (Reports & Analytics)**: 8 report types (Source/Funnel/Sales-Perf/Product/Followup/Financial/Exchange/Loss), drill-down, global filters, rule-based smart insights, charts, **CSV + Excel + PDF export**
+5. **Phase 5 — Module 17 (RTO Registration Tracking)**: full RTO workflow with progress tracker + alerts
+6. **Phase 6 — Module 18 (Feedback & Retention)**: feedback entity, negative→complaint ticket, auto WhatsApp thank-you / 45d RC reminder, customer profile page

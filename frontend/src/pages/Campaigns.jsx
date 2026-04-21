@@ -150,7 +150,7 @@ export default function Campaigns() {
           <div className="overline mb-2">Marketing</div>
           <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight">Campaigns</h1>
         </div>
-        <Button onClick={openNew} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm font-bold" data-testid="new-campaign-btn">
+        <Button onClick={openNew} className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="new-campaign-btn">
           <Plus className="w-4 h-4 mr-1" /> New campaign
         </Button>
       </div>
@@ -273,7 +273,7 @@ export default function Campaigns() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800" data-testid="c-save">Save</Button>
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" data-testid="c-save">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>

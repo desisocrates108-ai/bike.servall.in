@@ -221,7 +221,7 @@ export default function DeliverySection({ lead, constants, onReload }) {
             <Textarea rows={2} value={createForm.notes} onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })} className="mt-2" />
           </div>
           <div className="md:col-span-2 flex justify-end">
-            <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm font-bold" data-testid="create-delivery-btn">
+            <Button type="submit" className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="create-delivery-btn">
               <Truck className="w-4 h-4 mr-1" /> Schedule Delivery
             </Button>
           </div>
@@ -252,7 +252,7 @@ export default function DeliverySection({ lead, constants, onReload }) {
               {delivery.status}
             </span>
             {isDelivered && (
-              <Button size="sm" onClick={printChallan} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="print-challan-btn">
+              <Button size="sm" onClick={printChallan} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="print-challan-btn">
                 <Printer className="w-4 h-4 mr-1" /> Challan
               </Button>
             )}
@@ -318,7 +318,7 @@ export default function DeliverySection({ lead, constants, onReload }) {
               </Select>
               <Input type="number" className="w-16 h-9" value={accessory.quantity} onChange={(e) => setAccessory({ ...accessory, quantity: e.target.value })} data-testid="acc-qty" />
               <Input type="number" placeholder="value" className="w-24 h-9" value={accessory.value} onChange={(e) => setAccessory({ ...accessory, value: e.target.value })} data-testid="acc-value" />
-              <Button size="sm" onClick={addAccessory} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-acc-btn">
+              <Button size="sm" onClick={addAccessory} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-acc-btn">
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
@@ -405,7 +405,7 @@ export default function DeliverySection({ lead, constants, onReload }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOtpDialog(false)}>Close</Button>
-            <Button onClick={verifyOtp} className="bg-zinc-900 hover:bg-zinc-800" data-testid="verify-otp-btn">Verify</Button>
+            <Button onClick={verifyOtp} className="bg-brand hover:bg-brand-dark" data-testid="verify-otp-btn">Verify</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -165,7 +165,7 @@ export default function ExchangeSection({ lead, constants, onReload }) {
       <Card
         title="Pricing"
         right={
-          <Button size="sm" onClick={save} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm font-bold" data-testid="exch-save-btn">
+          <Button size="sm" onClick={save} className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="exch-save-btn">
             Save
           </Button>
         }
@@ -205,7 +205,7 @@ export default function ExchangeSection({ lead, constants, onReload }) {
             </Select>
             <Input type="number" placeholder="value" className="h-9 w-28" value={valForm.value} onChange={(e) => setValForm({ ...valForm, value: e.target.value })} data-testid="val-value" />
             <Input placeholder="remarks" className="h-9 w-40" value={valForm.remarks} onChange={(e) => setValForm({ ...valForm, remarks: e.target.value })} />
-            <Button size="sm" onClick={addValuation} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="val-add-btn">
+            <Button size="sm" onClick={addValuation} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="val-add-btn">
               <Handshake className="w-4 h-4 mr-1" /> Add
             </Button>
           </div>
@@ -237,7 +237,7 @@ export default function ExchangeSection({ lead, constants, onReload }) {
         right={
           <>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])} data-testid="exch-photo-input" />
-            <Button size="sm" onClick={() => fileRef.current?.click()} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="exch-photo-btn">
+            <Button size="sm" onClick={() => fileRef.current?.click()} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="exch-photo-btn">
               <ImagePlus className="w-4 h-4 mr-1" /> Add photo
             </Button>
           </>

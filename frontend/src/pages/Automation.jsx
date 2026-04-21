@@ -109,7 +109,7 @@ export default function Automation() {
       {tab === "templates" && (
         <>
           <div className="flex justify-end mb-3">
-            <Button onClick={() => { setTplEdit(null); setTplForm({ name: "", category: "general", message_type: "text", body: "", media_url: "", active: true }); setTplOpen(true); }} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-template-btn">
+            <Button onClick={() => { setTplEdit(null); setTplForm({ name: "", category: "general", message_type: "text", body: "", media_url: "", active: true }); setTplOpen(true); }} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-template-btn">
               <Plus className="w-4 h-4 mr-1" /> Add template
             </Button>
           </div>
@@ -145,7 +145,7 @@ export default function Automation() {
       {tab === "rules" && (
         <>
           <div className="flex justify-end mb-3">
-            <Button onClick={() => { setRuleEdit(null); setRuleForm({ name: "", event: "inquiry_created", template_id: templates[0]?.id || "", delay_minutes: 0, active: true, conditions: {} }); setRuleOpen(true); }} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-rule-btn">
+            <Button onClick={() => { setRuleEdit(null); setRuleForm({ name: "", event: "inquiry_created", template_id: templates[0]?.id || "", delay_minutes: 0, active: true, conditions: {} }); setRuleOpen(true); }} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-rule-btn">
               <Plus className="w-4 h-4 mr-1" /> Add rule
             </Button>
           </div>
@@ -217,7 +217,7 @@ export default function Automation() {
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setTplOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800" data-testid="tpl-save">Save</Button>
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" data-testid="tpl-save">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -276,7 +276,7 @@ export default function Automation() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setRuleOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800" data-testid="rule-save">Save</Button>
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" data-testid="rule-save">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>

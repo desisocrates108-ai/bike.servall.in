@@ -79,7 +79,7 @@ export default function Masters() {
         <Pane title="Branches">
           <div className="flex gap-2 mb-4">
             <Input placeholder="Add branch..." value={newBranch} onChange={(e) => setNewBranch(e.target.value)} data-testid="new-branch-input" />
-            <Button onClick={() => add("/branches", { name: newBranch }, () => setNewBranch(""), load)} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-branch-btn">Add</Button>
+            <Button onClick={() => add("/branches", { name: newBranch }, () => setNewBranch(""), load)} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-branch-btn">Add</Button>
           </div>
           {branches.map((b) => <Row key={b.id} label={b.name} onDelete={() => del(`/branches/${b.id}`, load)} testid={`branch-${b.id}`} />)}
         </Pane>
@@ -87,7 +87,7 @@ export default function Masters() {
         <Pane title="Brands">
           <div className="flex gap-2 mb-4">
             <Input placeholder="Add brand..." value={newBrand} onChange={(e) => setNewBrand(e.target.value)} data-testid="new-brand-input" />
-            <Button onClick={() => add("/brands", { name: newBrand }, () => setNewBrand(""), load)} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-brand-btn">Add</Button>
+            <Button onClick={() => add("/brands", { name: newBrand }, () => setNewBrand(""), load)} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-brand-btn">Add</Button>
           </div>
           {brands.map((b) => <Row key={b.id} label={b.name} onDelete={() => del(`/brands/${b.id}`, load)} testid={`brand-${b.id}`} />)}
         </Pane>
@@ -95,7 +95,7 @@ export default function Masters() {
         <Pane title="Colors">
           <div className="flex gap-2 mb-4">
             <Input placeholder="Add color..." value={newColor} onChange={(e) => setNewColor(e.target.value)} data-testid="new-color-input" />
-            <Button onClick={() => add("/colors", { name: newColor }, () => setNewColor(""), load)} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-color-btn">Add</Button>
+            <Button onClick={() => add("/colors", { name: newColor }, () => setNewColor(""), load)} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-color-btn">Add</Button>
           </div>
           {colors.map((c) => <Row key={c.id} label={c.name} onDelete={() => del(`/colors/${c.id}`, load)} testid={`color-${c.id}`} />)}
         </Pane>
@@ -114,7 +114,7 @@ export default function Masters() {
                 <Button
                   onClick={() => add("/models", { name: newModel, brand_id: selectedBrand }, () => setNewModel(""),
                     () => api.get("/models", { params: { brand_id: selectedBrand } }).then((r) => setModels(r.data)))}
-                  className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-model-btn"
+                  className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-model-btn"
                 >Add</Button>
               </div>
               {models.map((m) => (
@@ -144,7 +144,7 @@ export default function Masters() {
                 <Button
                   onClick={() => add("/variants", { name: newVariant, model_id: selectedModel }, () => setNewVariant(""),
                     () => api.get("/variants", { params: { model_id: selectedModel } }).then((r) => setVariants(r.data)))}
-                  className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-variant-btn"
+                  className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-variant-btn"
                 >Add</Button>
               </div>
               {variants.map((v) => (

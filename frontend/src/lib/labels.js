@@ -28,7 +28,8 @@ export const stageClass = (s) => {
   return map[s] || "bg-zinc-100 text-zinc-700";
 };
 
-export const roleLabel = (r) => {
+export const roleLabel = (r, t) => {
+  if (t) return t(`role.${r}`, r);
   const map = { super_admin: "Super Admin", admin: "Admin", sales_executive: "Sales Exec" };
   return map[r] || r;
 };

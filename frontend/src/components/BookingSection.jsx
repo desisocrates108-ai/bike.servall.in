@@ -281,7 +281,7 @@ export default function BookingSection({ lead, constants, onReload }) {
             <Textarea rows={2} value={createForm.notes} onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })} className="mt-2" />
           </div>
           <div className="md:col-span-2 flex justify-end">
-            <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm font-bold" data-testid="create-booking-btn">
+            <Button type="submit" className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="create-booking-btn">
               <Plus className="w-4 h-4 mr-1" /> Create Booking
             </Button>
           </div>
@@ -419,7 +419,7 @@ export default function BookingSection({ lead, constants, onReload }) {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditForm(null)}>Cancel</Button>
-              <Button onClick={saveEdit} className="bg-zinc-900 hover:bg-zinc-800" data-testid="save-booking-btn">Save</Button>
+              <Button onClick={saveEdit} className="bg-brand hover:bg-brand-dark" data-testid="save-booking-btn">Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -429,7 +429,7 @@ export default function BookingSection({ lead, constants, onReload }) {
         !isCancelled && (
           <Dialog open={payOpen} onOpenChange={setPayOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="add-payment-btn">
+              <Button size="sm" className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="add-payment-btn">
                 <Plus className="w-4 h-4 mr-1" /> Add Payment
               </Button>
             </DialogTrigger>
@@ -469,7 +469,7 @@ export default function BookingSection({ lead, constants, onReload }) {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button>
-                <Button onClick={addPayment} className="bg-zinc-900 hover:bg-zinc-800" data-testid="save-payment-btn">Save</Button>
+                <Button onClick={addPayment} className="bg-brand hover:bg-brand-dark" data-testid="save-payment-btn">Save</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -530,7 +530,7 @@ export default function BookingSection({ lead, constants, onReload }) {
             isConfirmed ? (
               <Dialog open={allotOpen} onOpenChange={setAllotOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="assign-vehicle-btn">
+                  <Button size="sm" className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="assign-vehicle-btn">
                     <Car className="w-4 h-4 mr-1" /> Assign Vehicle
                   </Button>
                 </DialogTrigger>
@@ -548,7 +548,7 @@ export default function BookingSection({ lead, constants, onReload }) {
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setAllotOpen(false)}>Cancel</Button>
-                    <Button onClick={assignVehicle} className="bg-zinc-900 hover:bg-zinc-800" data-testid="save-allotment-btn">Allot</Button>
+                    <Button onClick={assignVehicle} className="bg-brand hover:bg-brand-dark" data-testid="save-allotment-btn">Allot</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -628,7 +628,7 @@ export default function BookingSection({ lead, constants, onReload }) {
             </div>
             <div className="md:col-span-2 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setShowFinance(false)}>Cancel</Button>
-              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="fc-submit-btn">Create Finance Case</Button>
+              <Button type="submit" className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="fc-submit-btn">Create Finance Case</Button>
             </div>
           </form>
         )}

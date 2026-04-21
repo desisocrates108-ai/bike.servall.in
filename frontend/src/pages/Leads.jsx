@@ -63,7 +63,7 @@ export default function Leads() {
           </h1>
         </div>
         <Link to="/leads/new">
-          <Button className="rounded-sm bg-zinc-900 hover:bg-zinc-800 font-bold" data-testid="new-lead-btn">
+          <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="new-lead-btn">
             <Plus className="w-4 h-4 mr-1" /> New Lead
           </Button>
         </Link>

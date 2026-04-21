@@ -198,7 +198,7 @@ export default function DocumentsSection({ lead, constants, onReload }) {
             <Textarea rows={2} value={upload.notes} onChange={(e) => setUpload({ ...upload, notes: e.target.value })} className="mt-2" />
           </div>
           <div className="md:col-span-2 flex justify-end">
-            <Button type="submit" disabled={uploading} className="rounded-sm bg-zinc-900 hover:bg-zinc-800 font-bold" data-testid="upload-submit">
+            <Button type="submit" disabled={uploading} className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="upload-submit">
               <Upload className="w-4 h-4 mr-1" /> {uploading ? "Uploading..." : "Upload"}
             </Button>
           </div>
@@ -351,7 +351,7 @@ function DocumentCard({ doc, onOcr, onSave, onVerify, onReject, onView, isManage
             </div>
           )}
           <div className="md:col-span-2 flex justify-end">
-            <Button size="sm" onClick={() => { onSave(extracted, docNumber); setEditing(false); }} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid={`save-ext-${doc.id}`}>
+            <Button size="sm" onClick={() => { onSave(extracted, docNumber); setEditing(false); }} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid={`save-ext-${doc.id}`}>
               Save
             </Button>
           </div>

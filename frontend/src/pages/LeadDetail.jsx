@@ -309,7 +309,7 @@ export default function LeadDetail() {
         <div className="flex gap-2">
           <Dialog open={stageDialog} onOpenChange={setStageDialog}>
             <DialogTrigger asChild>
-              <Button className="rounded-sm bg-zinc-900 hover:bg-zinc-800 font-bold" data-testid="change-stage-btn">
+              <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="change-stage-btn">
                 Change Stage
               </Button>
             </DialogTrigger>
@@ -344,7 +344,7 @@ export default function LeadDetail() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setStageDialog(false)}>Cancel</Button>
-                <Button onClick={submitStage} disabled={!nextStage} className="bg-zinc-900 hover:bg-zinc-800" data-testid="confirm-stage-btn">
+                <Button onClick={submitStage} disabled={!nextStage} className="bg-brand hover:bg-brand-dark" data-testid="confirm-stage-btn">
                   Confirm
                 </Button>
               </DialogFooter>
@@ -520,7 +520,7 @@ export default function LeadDetail() {
                 </div>
               )}
               <div className="md:col-span-2 lg:col-span-3 flex justify-end">
-                <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm font-bold" data-testid="add-fu-btn">
+                <Button type="submit" className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="add-fu-btn">
                   <PhoneCall className="w-4 h-4 mr-1" /> Log Follow-up
                 </Button>
               </div>
@@ -612,7 +612,7 @@ export default function LeadDetail() {
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setApproveDialog(false)}>Cancel</Button>
-                      <Button onClick={submitApproval} className="bg-zinc-900 hover:bg-zinc-800" data-testid="confirm-approval-btn">Submit</Button>
+                      <Button onClick={submitApproval} className="bg-brand hover:bg-brand-dark" data-testid="confirm-approval-btn">Submit</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -689,7 +689,7 @@ export default function LeadDetail() {
                     Request Approval
                   </Button>
                 )}
-                <Button onClick={saveDeal} className="bg-zinc-900 hover:bg-zinc-800 rounded-sm font-bold" data-testid="save-deal-btn">
+                <Button onClick={saveDeal} className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="save-deal-btn">
                   Save Deal
                 </Button>
               </div>

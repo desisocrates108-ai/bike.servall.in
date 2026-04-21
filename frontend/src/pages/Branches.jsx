@@ -109,7 +109,7 @@ export default function Branches() {
           <p className="text-sm text-zinc-500 mt-2">Point-of-sale (POS) branch management. Deactivate a branch to freeze new lead creation without deleting history.</p>
         </div>
         {isSuper && (
-          <Button onClick={openNew} className="rounded-sm bg-zinc-900 hover:bg-zinc-800 font-bold" data-testid="add-branch-btn">
+          <Button onClick={openNew} className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="add-branch-btn">
             <Plus className="w-4 h-4 mr-1" /> New branch
           </Button>
         )}
@@ -205,7 +205,7 @@ export default function Branches() {
             </div>
             <DialogFooter>
               <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800" data-testid="save-branch-btn">
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" data-testid="save-branch-btn">
                 {editing ? "Save" : "Create"}
               </Button>
             </DialogFooter>

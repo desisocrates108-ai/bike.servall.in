@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import {
   TrendingUp, CheckCircle2, XCircle, Clock, Flame, Users2,
@@ -38,6 +39,7 @@ const Stat = ({ label, value, icon: Icon, tone = "dark", testid, linkTo }) => {
 };
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [perf, setPerf] = useState([]);
@@ -76,23 +78,23 @@ export default function Dashboard() {
         </div>
         <Link
           to="/leads/new"
-          className="hidden md:inline-flex items-center gap-2 bg-zinc-900 text-white px-4 py-2.5 rounded-sm font-bold text-sm hover:bg-zinc-800"
+          className="hidden md:inline-flex items-center gap-2 bg-brand text-white px-4 py-2.5 rounded-sm font-bold text-sm hover:bg-brand-dark"
           data-testid="dash-new-lead-btn"
         >
-          + New Lead
+          + {t("nav.new_lead")}
         </Link>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <Stat label="Total Leads" value={summary.total_leads} icon={TrendingUp} testid="stat-total" />
-        <Stat label="Converted" value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" />
-        <Stat label="Lost" value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" />
-        <Stat label="Conversion %" value={`${summary.conversion_rate}%`} icon={BadgePercent} tone="info" testid="stat-conv-rate" />
+        <Stat label={t("dashboard.total_leads")} value={summary.total_leads} icon={TrendingUp} testid="stat-total" />
+        <Stat label={t("dashboard.converted")} value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" />
+        <Stat label={t("dashboard.lost")} value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" />
+        <Stat label={`${t("dashboard.converted")} %`} value={`${summary.conversion_rate}%`} icon={BadgePercent} tone="info" testid="stat-conv-rate" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Stat label="Due Today" value={summary.followups_due_today} icon={Clock} testid="stat-due-today" linkTo="/tasks?kind=today" />
-        <Stat label="Missed" value={summary.followups_missed} icon={AlertTriangle} tone="danger" testid="stat-missed" linkTo="/tasks?kind=missed" />
+        <Stat label={t("dashboard.followups_today")} value={summary.followups_due_today} icon={Clock} testid="stat-due-today" linkTo="/tasks?kind=today" />
+        <Stat label={t("dashboard.missed")} value={summary.followups_missed} icon={AlertTriangle} tone="danger" testid="stat-missed" linkTo="/tasks?kind=missed" />
         <Stat label="Upcoming" value={summary.followups_upcoming} icon={CalendarClock} testid="stat-upcoming" linkTo="/tasks?kind=upcoming" />
         <Stat label="At Risk" value={summary.at_risk} icon={AlertTriangle} tone="warn" testid="stat-at-risk" linkTo="/tasks?kind=at_risk" />
       </div>
@@ -197,10 +199,10 @@ export default function Dashboard() {
         <Card className="mt-6" testid="branch-compare-card">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="overline">Branch comparison</div>
-              <div className="text-sm text-zinc-500 mt-1">Leads, conversions and revenue across all active branches.</div>
+              <div className="overline">{t("dashboard.branch_comparison")}</div>
+              <div className="text-sm text-zinc-500 mt-1">{t("dashboard.branch_compare_desc")}</div>
             </div>
-            <Link to="/branches" className="text-xs font-semibold text-zinc-900 hover:underline">View all →</Link>
+            <Link to="/branches" className="text-xs font-semibold text-brand hover:underline">View all →</Link>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table w-full">

@@ -350,7 +350,7 @@ export default function LeadForm() {
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => nav(-1)} className="rounded-sm">Cancel</Button>
-          <Button type="submit" disabled={busy} className="rounded-sm bg-zinc-900 hover:bg-zinc-800 font-bold" data-testid="submit-lead-button">
+          <Button type="submit" disabled={busy} className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="submit-lead-button">
             {busy ? "Saving..." : "Create Lead"}
           </Button>
         </div>

@@ -128,7 +128,7 @@ export default function Users() {
           <div className="overline mb-2">Team</div>
           <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight">Users</h1>
         </div>
-        <Button onClick={openNew} className="rounded-sm bg-zinc-900 hover:bg-zinc-800 font-bold" data-testid="add-user-btn">
+        <Button onClick={openNew} className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="add-user-btn">
           <UserPlus className="w-4 h-4 mr-1" /> Add user
         </Button>
       </div>
@@ -290,7 +290,7 @@ export default function Users() {
 
             <DialogFooter>
               <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800" data-testid="save-user-btn">
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" data-testid="save-user-btn">
                 {editing ? "Save" : "Create"}
               </Button>
             </DialogFooter>

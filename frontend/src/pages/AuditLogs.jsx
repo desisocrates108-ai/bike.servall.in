@@ -134,7 +134,7 @@ export default function AuditLogs() {
           </div>
         </div>
         <div className="flex justify-end mt-3">
-          <Button onClick={reload} size="sm" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="audit-apply-filters">
+          <Button onClick={reload} size="sm" className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="audit-apply-filters">
             Apply
           </Button>
         </div>
