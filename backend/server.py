@@ -81,7 +81,22 @@ PAYMENT_TYPES = ["Booking", "Margin", "Final", "Other"]
 PAYMENT_STATUSES = ["Pending", "Partial", "Completed"]
 FINANCE_STATUSES = ["Not Applied", "Applied", "Under Review", "Approved", "Rejected"]
 EXCHANGE_CONDITIONS = ["Good", "Average", "Poor"]
-MARGIN_ALERT_DAYS = 3  # show "margin due before X days of delivery"
+MARGIN_ALERT_DAYS = 3
+
+# Module 11 — WhatsApp Automation
+WA_EVENTS = [
+    "inquiry_created", "stage_changed", "followup_due", "deal_updated",
+    "booking_confirmed", "delivery_scheduled", "delivery_completed",
+    "feedback_reminder", "rc_reminder", "lost_reengage", "manual", "campaign",
+]
+WA_MESSAGE_TYPES = ["text", "image", "pdf", "document"]
+WA_STATUSES = ["PENDING", "SENT", "DELIVERED", "READ", "FAILED"]
+WA_REPLY_TAGS = ["Interested", "Not Interested", "Call Back", "Other"]
+WA_MAX_RETRIES = 3
+
+# Module 12 — Campaigns
+CAMPAIGN_TYPES = ["Festival", "Offer", "Service Reminder", "Exchange Offer", "Custom"]
+CAMPAIGN_STATUSES = ["Draft", "Scheduled", "Running", "Completed", "Cancelled"]  # show "margin due before X days of delivery"
 DOC_REQUIREMENTS = {
     "Booking": ["Aadhaar Card"],
     "Finance": ["Aadhaar Card", "PAN Card", "Bank Statement"],
@@ -403,6 +418,95 @@ class ExchangeValuationIn(BaseModel):
     source: str  # "broker" / "internal" / "online"
     value: float
     remarks: Optional[str] = None
+
+
+# ---- Module 11: WhatsApp ----
+
+class WATemplateIn(BaseModel):
+    name: str
+    category: Optional[str] = "general"
+    message_type: str = "text"  # text/image/pdf/document
+    body: str
+    media_url: Optional[str] = None
+    active: bool = True
+
+
+class WATemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    message_type: Optional[str] = None
+    body: Optional[str] = None
+    media_url: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class AutomationRuleIn(BaseModel):
+    name: str
+    event: str  # in WA_EVENTS
+    conditions: Dict[str, Any] = {}  # {source, priority, purchase_type, payment_mode, branch_id, stage, brand_id}
+    template_id: str
+    delay_minutes: int = 0
+    active: bool = True
+
+
+class AutomationRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    event: Optional[str] = None
+    conditions: Optional[Dict[str, Any]] = None
+    template_id: Optional[str] = None
+    delay_minutes: Optional[int] = None
+    active: Optional[bool] = None
+
+
+class ManualMessageIn(BaseModel):
+    template_id: Optional[str] = None
+    content: Optional[str] = None
+    message_type: str = "text"
+    media_url: Optional[str] = None
+    variables: Dict[str, str] = {}
+
+
+class InboundMessageIn(BaseModel):
+    content: str
+    reply_tag: Optional[str] = None
+
+
+class MessageMarkIn(BaseModel):
+    status: str  # SENT / DELIVERED / READ / FAILED
+
+
+# ---- Module 12: Campaigns ----
+
+class CampaignTarget(BaseModel):
+    stages: List[str] = []
+    priorities: List[str] = []
+    sources: List[str] = []
+    branch_ids: List[str] = []
+    purchase_types: List[str] = []
+    audience: str = "leads"  # leads / past_buyers / all
+
+
+class CampaignIn(BaseModel):
+    name: str
+    campaign_type: str = "Custom"
+    template_id: Optional[str] = None
+    message_type: str = "text"
+    content: Optional[str] = None
+    media_url: Optional[str] = None
+    scheduled_at: Optional[str] = None  # ISO
+    target: CampaignTarget = CampaignTarget()
+
+
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    campaign_type: Optional[str] = None
+    template_id: Optional[str] = None
+    message_type: Optional[str] = None
+    content: Optional[str] = None
+    media_url: Optional[str] = None
+    scheduled_at: Optional[str] = None
+    target: Optional[CampaignTarget] = None
+    status: Optional[str] = None
 
 
 class AllotmentIn(BaseModel):
@@ -853,6 +957,10 @@ async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
     await add_timeline(lead_id, "Lead Created", user, {"source": body.source})
     if assigned_to:
         await add_timeline(lead_id, "Lead Assigned", user, {"assigned_to": assigned_to})
+    try:
+        await fire_event("inquiry_created", doc, user)
+    except Exception as _e:
+        logger.warning(f"inquiry_created fire_event failed: {_e}")
     return await db.leads.find_one({"id": lead_id}, {"_id": 0})
 
 
@@ -1020,7 +1128,16 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
     await add_timeline(lid, "Stage Changed", user,
                        {"from": lead.get("stage"), "to": body.stage,
                         "lost_reason": body.lost_reason})
-    return await db.leads.find_one({"id": lid}, {"_id": 0})
+    fresh = await db.leads.find_one({"id": lid}, {"_id": 0})
+    try:
+        if body.stage == "Lost":
+            await fire_event("lost_reengage", fresh, user)
+        else:
+            await fire_event("stage_changed", fresh, user,
+                             {"from_stage": lead.get("stage"), "to_stage": body.stage})
+    except Exception as _e:
+        logger.warning(f"stage_changed fire_event failed: {_e}")
+    return fresh
 
 
 @api.post("/leads/{lid}/assign")
@@ -2307,17 +2424,147 @@ def _stage_doc_requirements(stage: str, lead_docs: List[dict]) -> List[str]:
 # Module 8 — Delivery
 # ============================================================
 
+async def _render_template(body: str, variables: Dict[str, Any]) -> str:
+    out = body or ""
+    for k, v in (variables or {}).items():
+        out = out.replace("{{" + str(k) + "}}", str(v if v is not None else ""))
+    return out
+
+
+async def _lead_variables(lead: dict, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    brand = await db.brands.find_one({"id": lead.get("brand_id")}, {"_id": 0}) if lead.get("brand_id") else None
+    model = await db.vehicle_models.find_one({"id": lead.get("model_id")}, {"_id": 0}) if lead.get("model_id") else None
+    branch = await db.branches.find_one({"id": lead.get("branch_id")}, {"_id": 0}) if lead.get("branch_id") else None
+    exec_u = await db.users.find_one({"id": lead.get("assigned_to")}, {"_id": 0, "password_hash": 0}) if lead.get("assigned_to") else None
+    deal = lead.get("deal") or {}
+    vars_ = {
+        "customer_name": lead.get("customer_name", ""),
+        "phone": lead.get("phone", ""),
+        "vehicle": " ".join(filter(None, [(brand or {}).get("name"), (model or {}).get("name")])) or "your vehicle",
+        "brand": (brand or {}).get("name", ""),
+        "model": (model or {}).get("name", ""),
+        "branch": (branch or {}).get("name", ""),
+        "sales_exec": (exec_u or {}).get("name", "our team"),
+        "stage": lead.get("stage", ""),
+        "deal_amount": deal.get("final_deal_price") or deal.get("offered_price") or "",
+        "price": deal.get("offered_price") or "",
+        "discount": deal.get("discount") or "",
+    }
+    vars_.update(extra or {})
+    return vars_
+
+
+async def _is_opted_out(lead_id: str, phone: Optional[str]) -> bool:
+    q = {"$or": [{"lead_id": lead_id}]}
+    if phone:
+        q["$or"].append({"phone": phone})
+    return bool(await db.wa_optouts.find_one(q))
+
+
+def _conditions_match(lead: dict, conditions: Dict[str, Any]) -> bool:
+    for k, v in (conditions or {}).items():
+        if v is None or v == "" or v == []:
+            continue
+        lv = lead.get(k)
+        if isinstance(v, list):
+            if lv not in v:
+                return False
+        else:
+            if lv != v:
+                return False
+    return True
+
+
+async def _queue_message(
+    lead: dict,
+    *,
+    template_id: Optional[str] = None,
+    content: Optional[str] = None,
+    message_type: str = "text",
+    media_url: Optional[str] = None,
+    trigger: str = "manual",
+    variables: Optional[Dict[str, Any]] = None,
+    user: Optional[dict] = None,
+    campaign_id: Optional[str] = None,
+    scheduled_at: Optional[str] = None,
+) -> Optional[dict]:
+    if await _is_opted_out(lead["id"], lead.get("phone")):
+        return None
+    rendered = content
+    if template_id and not rendered:
+        tpl = await db.wa_templates.find_one({"id": template_id, "active": True}, {"_id": 0})
+        if not tpl:
+            return None
+        message_type = tpl.get("message_type", message_type)
+        media_url = media_url or tpl.get("media_url")
+        all_vars = await _lead_variables(lead, variables)
+        rendered = await _render_template(tpl.get("body", ""), all_vars)
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "lead_id": lead["id"],
+        "branch_id": lead.get("branch_id"),
+        "phone": lead.get("phone"),
+        "template_id": template_id,
+        "message_type": message_type,
+        "content": rendered or "",
+        "media_url": media_url,
+        "direction": "outbound",
+        "status": "PENDING",
+        "trigger_source": trigger,
+        "campaign_id": campaign_id,
+        "retry_count": 0,
+        "reply_tag": None,
+        "scheduled_at": scheduled_at,
+        "created_by": (user or {}).get("id"),
+        "created_by_name": (user or {}).get("name"),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.wa_messages.insert_one(doc)
+    # In real wiring a Twilio/WATI worker would send here. For now, auto-mark SENT.
+    await db.wa_messages.update_one({"id": doc["id"]},
+                                    {"$set": {"status": "SENT", "sent_at": now_iso()}})
+    doc["status"] = "SENT"
+    doc.pop("_id", None)
+    return doc
+
+
 async def _log_whatsapp(lead: dict, intent: str, payload: dict, user: Optional[dict] = None):
+    """Legacy helper — kept for backward compat; now also queues via engine."""
+    # Keep the old log table for older UI references (still tail-read by DeliverySection)
     await db.whatsapp_logs.insert_one({
         "id": str(uuid.uuid4()),
         "lead_id": lead["id"],
         "phone": lead.get("phone"),
         "intent": intent,
         "payload": payload,
-        "status": "LOGGED",  # would become "SENT" after Twilio/Wati hookup
+        "status": "LOGGED",
         "actor_id": (user or {}).get("id"),
         "created_at": now_iso(),
     })
+
+
+async def fire_event(event: str, lead: dict, user: Optional[dict] = None,
+                     extra: Optional[Dict[str, Any]] = None):
+    """Look up matching rules and queue WA messages."""
+    if not lead or not lead.get("phone"):
+        return
+    rules = await db.automation_rules.find({"event": event, "active": True}, {"_id": 0}).to_list(200)
+    for r in rules:
+        if not _conditions_match(lead, r.get("conditions") or {}):
+            continue
+        scheduled_at = None
+        if r.get("delay_minutes"):
+            scheduled_at = (datetime.now(timezone.utc) + timedelta(minutes=int(r["delay_minutes"]))).isoformat()
+        await _queue_message(
+            lead,
+            template_id=r["template_id"],
+            trigger=event,
+            variables=extra,
+            user=user,
+            scheduled_at=scheduled_at,
+        )
 
 
 @api.get("/leads/{lid}/whatsapp-logs")
@@ -2329,6 +2576,407 @@ async def list_whatsapp_logs(lid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(403, "Access denied")
     items = await db.whatsapp_logs.find({"lead_id": lid}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
+
+
+# ---------- WA Templates ----------
+
+@api.get("/wa-templates")
+async def list_templates(user: dict = Depends(get_current_user)):
+    return await db.wa_templates.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+
+
+@api.post("/wa-templates")
+async def create_template(body: WATemplateIn, user: dict = Depends(require_roles("super_admin", "admin"))):
+    if body.message_type not in WA_MESSAGE_TYPES:
+        raise HTTPException(400, "Invalid message_type")
+    doc = body.model_dump()
+    doc.update({"id": str(uuid.uuid4()), "created_by": user["id"],
+                "created_at": now_iso(), "updated_at": now_iso()})
+    await db.wa_templates.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/wa-templates/{tid}")
+async def update_template(tid: str, body: WATemplateUpdate,
+                          user: dict = Depends(require_roles("super_admin", "admin"))):
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "message_type" in updates and updates["message_type"] not in WA_MESSAGE_TYPES:
+        raise HTTPException(400, "Invalid message_type")
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.wa_templates.update_one({"id": tid}, {"$set": updates})
+    return await db.wa_templates.find_one({"id": tid}, {"_id": 0})
+
+
+@api.delete("/wa-templates/{tid}")
+async def delete_template(tid: str, user: dict = Depends(require_roles("super_admin"))):
+    await db.wa_templates.delete_one({"id": tid})
+    return {"ok": True}
+
+
+# ---------- Automation Rules ----------
+
+@api.get("/automation-rules")
+async def list_rules(user: dict = Depends(get_current_user)):
+    return await db.automation_rules.find({}, {"_id": 0}).sort("event", 1).to_list(500)
+
+
+@api.post("/automation-rules")
+async def create_rule(body: AutomationRuleIn,
+                      user: dict = Depends(require_roles("super_admin", "admin"))):
+    if body.event not in WA_EVENTS:
+        raise HTTPException(400, "Invalid event")
+    doc = body.model_dump()
+    doc.update({"id": str(uuid.uuid4()), "created_at": now_iso(), "updated_at": now_iso()})
+    await db.automation_rules.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/automation-rules/{rid}")
+async def update_rule(rid: str, body: AutomationRuleUpdate,
+                      user: dict = Depends(require_roles("super_admin", "admin"))):
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "event" in updates and updates["event"] not in WA_EVENTS:
+        raise HTTPException(400, "Invalid event")
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.automation_rules.update_one({"id": rid}, {"$set": updates})
+    return await db.automation_rules.find_one({"id": rid}, {"_id": 0})
+
+
+@api.delete("/automation-rules/{rid}")
+async def delete_rule(rid: str, user: dict = Depends(require_roles("super_admin"))):
+    await db.automation_rules.delete_one({"id": rid})
+    return {"ok": True}
+
+
+# ---------- Lead-level messaging ----------
+
+@api.get("/leads/{lid}/wa-messages")
+async def list_lead_messages(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    items = await db.wa_messages.find({"lead_id": lid}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    return items
+
+
+@api.post("/leads/{lid}/wa-messages")
+async def send_manual(lid: str, body: ManualMessageIn, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if not body.template_id and not body.content:
+        raise HTTPException(400, "Provide template_id or content")
+    if body.message_type not in WA_MESSAGE_TYPES:
+        raise HTTPException(400, "Invalid message_type")
+    doc = await _queue_message(
+        lead,
+        template_id=body.template_id,
+        content=body.content,
+        message_type=body.message_type,
+        media_url=body.media_url,
+        variables=body.variables,
+        trigger="manual",
+        user=user,
+    )
+    if not doc:
+        raise HTTPException(400, "Message not sent (opted out or invalid template)")
+    return doc
+
+
+@api.post("/leads/{lid}/wa-inbound")
+async def receive_inbound(lid: str, body: InboundMessageIn, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if body.reply_tag and body.reply_tag not in WA_REPLY_TAGS:
+        raise HTTPException(400, "Invalid reply_tag")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "lead_id": lid,
+        "branch_id": lead.get("branch_id"),
+        "phone": lead.get("phone"),
+        "template_id": None,
+        "message_type": "text",
+        "content": body.content,
+        "media_url": None,
+        "direction": "inbound",
+        "status": "READ",
+        "trigger_source": "inbound",
+        "campaign_id": None,
+        "retry_count": 0,
+        "reply_tag": body.reply_tag,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.wa_messages.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.post("/wa-messages/{mid}/mark")
+async def mark_message(mid: str, body: MessageMarkIn, user: dict = Depends(get_current_user)):
+    if body.status not in WA_STATUSES:
+        raise HTTPException(400, "Invalid status")
+    msg = await db.wa_messages.find_one({"id": mid}, {"_id": 0})
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    lead = await db.leads.find_one({"id": msg["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    updates = {"status": body.status, "updated_at": now_iso()}
+    if body.status == "SENT":
+        updates["sent_at"] = now_iso()
+    if body.status == "DELIVERED":
+        updates["delivered_at"] = now_iso()
+    if body.status == "READ":
+        updates["read_at"] = now_iso()
+    if body.status == "FAILED":
+        updates["failed_at"] = now_iso()
+    await db.wa_messages.update_one({"id": mid}, {"$set": updates})
+    return await db.wa_messages.find_one({"id": mid}, {"_id": 0})
+
+
+@api.post("/wa-messages/{mid}/retry")
+async def retry_message(mid: str, user: dict = Depends(get_current_user)):
+    msg = await db.wa_messages.find_one({"id": mid}, {"_id": 0})
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    lead = await db.leads.find_one({"id": msg["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if msg.get("retry_count", 0) >= WA_MAX_RETRIES:
+        raise HTTPException(400, "Max retries reached")
+    await db.wa_messages.update_one({"id": mid}, {
+        "$inc": {"retry_count": 1},
+        "$set": {"status": "SENT", "updated_at": now_iso(), "sent_at": now_iso()},
+    })
+    return await db.wa_messages.find_one({"id": mid}, {"_id": 0})
+
+
+@api.post("/leads/{lid}/wa-optout")
+async def optout(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    await db.wa_optouts.update_one(
+        {"lead_id": lid},
+        {"$set": {"id": str(uuid.uuid4()), "lead_id": lid, "phone": lead.get("phone"),
+                  "created_at": now_iso(), "created_by": user["id"]}},
+        upsert=True,
+    )
+    return {"opted_out": True}
+
+
+@api.delete("/leads/{lid}/wa-optout")
+async def optin(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    await db.wa_optouts.delete_many({"lead_id": lid})
+    return {"opted_out": False}
+
+
+@api.get("/leads/{lid}/wa-optout")
+async def optout_status(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    exists = await db.wa_optouts.find_one({"lead_id": lid}, {"_id": 0})
+    return {"opted_out": bool(exists)}
+
+
+# ============================================================
+# Module 12 — Campaigns
+# ============================================================
+
+def _campaign_filter_to_query(target: dict, scope: Dict[str, Any]) -> Dict[str, Any]:
+    q: Dict[str, Any] = {**scope}
+    t = target or {}
+    if t.get("stages"):
+        audience = t.get("audience") or "leads"
+        if audience == "past_buyers":
+            q["stage"] = {"$in": ["Delivery", "Registration", "Feedback"]}
+        elif audience == "all":
+            pass
+        else:
+            q["stage"] = {"$in": t["stages"]}
+    if t.get("priorities"):
+        q["priority"] = {"$in": t["priorities"]}
+    if t.get("sources"):
+        q["source"] = {"$in": t["sources"]}
+    if t.get("branch_ids"):
+        q["branch_id"] = {"$in": t["branch_ids"]}
+    if t.get("purchase_types"):
+        q["purchase_type"] = {"$in": t["purchase_types"]}
+    return q
+
+
+async def _campaign_audience_query(camp: dict, user: dict) -> Dict[str, Any]:
+    scope: Dict[str, Any] = {}
+    if user["role"] == "admin":
+        scope["branch_id"] = user.get("branch_id")
+    return _campaign_filter_to_query(camp.get("target") or {}, scope)
+
+
+@api.get("/campaigns")
+async def list_campaigns(user: dict = Depends(get_current_user)):
+    q: Dict[str, Any] = {}
+    if user["role"] == "admin":
+        q["$or"] = [{"created_by": user["id"]}, {"branch_scope": user.get("branch_id")}]
+    elif user["role"] == "sales_executive":
+        raise HTTPException(403, "Access denied")
+    items = await db.campaigns.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+
+@api.post("/campaigns")
+async def create_campaign(body: CampaignIn,
+                          user: dict = Depends(require_roles("super_admin", "admin"))):
+    if body.campaign_type not in CAMPAIGN_TYPES:
+        raise HTTPException(400, "Invalid campaign_type")
+    if body.message_type not in WA_MESSAGE_TYPES:
+        raise HTTPException(400, "Invalid message_type")
+    if not body.template_id and not body.content:
+        raise HTTPException(400, "Provide template_id or content")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": body.name,
+        "campaign_type": body.campaign_type,
+        "template_id": body.template_id,
+        "message_type": body.message_type,
+        "content": body.content,
+        "media_url": body.media_url,
+        "scheduled_at": body.scheduled_at,
+        "target": body.target.model_dump() if body.target else {},
+        "status": "Scheduled" if body.scheduled_at else "Draft",
+        "branch_scope": user.get("branch_id") if user["role"] == "admin" else None,
+        "stats": {"sent": 0, "delivered": 0, "read": 0, "failed": 0,
+                  "responses": 0, "conversions": 0, "queued": 0},
+        "created_by": user["id"],
+        "created_by_name": user["name"],
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.campaigns.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/campaigns/{cid}")
+async def update_campaign(cid: str, body: CampaignUpdate,
+                          user: dict = Depends(require_roles("super_admin", "admin"))):
+    updates: Dict[str, Any] = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "target" in updates and isinstance(updates["target"], dict):
+        pass
+    if "status" in updates and updates["status"] not in CAMPAIGN_STATUSES:
+        raise HTTPException(400, "Invalid status")
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.campaigns.update_one({"id": cid}, {"$set": updates})
+    return await db.campaigns.find_one({"id": cid}, {"_id": 0})
+
+
+@api.delete("/campaigns/{cid}")
+async def delete_campaign(cid: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    await db.campaigns.delete_one({"id": cid})
+    return {"ok": True}
+
+
+@api.post("/campaigns/{cid}/preview")
+async def campaign_preview(cid: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    q = await _campaign_audience_query(camp, user)
+    count = await db.leads.count_documents(q)
+    sample = await db.leads.find(q, {"_id": 0, "id": 1, "customer_name": 1, "phone": 1,
+                                     "stage": 1, "source": 1}).limit(10).to_list(10)
+    return {"audience_count": count, "sample": sample}
+
+
+@api.post("/campaigns/{cid}/send")
+async def campaign_send(cid: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp.get("status") in ("Running", "Completed"):
+        raise HTTPException(400, f"Campaign already {camp['status']}")
+    q = await _campaign_audience_query(camp, user)
+    await db.campaigns.update_one({"id": cid},
+                                  {"$set": {"status": "Running", "started_at": now_iso()}})
+
+    sent = 0
+    async for lead in db.leads.find(q, {"_id": 0}):
+        if not lead.get("phone"):
+            continue
+        # Duplicate protection: skip if same campaign messaged this lead in last 24h
+        dup = await db.wa_messages.find_one({"lead_id": lead["id"], "campaign_id": cid})
+        if dup:
+            continue
+        await _queue_message(
+            lead,
+            template_id=camp.get("template_id"),
+            content=camp.get("content"),
+            message_type=camp.get("message_type", "text"),
+            media_url=camp.get("media_url"),
+            trigger="campaign",
+            user=user,
+            campaign_id=cid,
+        )
+        sent += 1
+
+    await db.campaigns.update_one({"id": cid}, {"$set": {
+        "status": "Completed",
+        "completed_at": now_iso(),
+        "stats.queued": sent,
+    }})
+    return {"queued": sent}
+
+
+@api.get("/campaigns/{cid}/stats")
+async def campaign_stats(cid: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    stats = {"queued": 0, "sent": 0, "delivered": 0, "read": 0, "failed": 0}
+    pipeline = [{"$match": {"campaign_id": cid}},
+                {"$group": {"_id": "$status", "n": {"$sum": 1}}}]
+    async for row in db.wa_messages.aggregate(pipeline):
+        s = row["_id"]
+        stats["queued"] += row["n"]
+        if s == "SENT": stats["sent"] = row["n"]
+        elif s == "DELIVERED": stats["delivered"] = row["n"]
+        elif s == "READ": stats["read"] = row["n"]
+        elif s == "FAILED": stats["failed"] = row["n"]
+
+    # Responses: inbound messages by leads who got this campaign
+    lead_ids = await db.wa_messages.distinct("lead_id", {"campaign_id": cid})
+    responses = await db.wa_messages.count_documents({
+        "lead_id": {"$in": lead_ids}, "direction": "inbound",
+    })
+    conversions = await db.leads.count_documents({
+        "id": {"$in": lead_ids},
+        "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]},
+    })
+    stats["responses"] = responses
+    stats["conversions"] = conversions
+    return {**camp.get("stats", {}), **stats}
 
 
 @api.post("/leads/{lid}/delivery")
@@ -2677,6 +3325,12 @@ async def seed_data():
     await db.whatsapp_logs.create_index("lead_id")
     await db.finance_cases.create_index("lead_id", unique=True)
     await db.exchange_valuations.create_index("lead_id")
+    await db.wa_templates.create_index("name", unique=True)
+    await db.automation_rules.create_index("event")
+    await db.wa_messages.create_index("lead_id")
+    await db.wa_messages.create_index("campaign_id")
+    await db.wa_optouts.create_index("lead_id", unique=True)
+    await db.campaigns.create_index("status")
 
     # Branches
     branch_defs = [
@@ -2786,6 +3440,34 @@ async def seed_data():
                               "is_active": True, "name": u["name"]}}
                 )
 
+    # Seed default WA templates
+    default_templates = [
+        ("inquiry_welcome", "inquiry",
+         "Hi {{customer_name}}! Thanks for your interest in {{vehicle}} at {{branch}}. I'm {{sales_exec}} — reply with any questions, or drop by the showroom anytime."),
+        ("followup_reminder", "followup",
+         "Hi {{customer_name}}, checking in on your interest in {{vehicle}}. Would you like to schedule a test ride?"),
+        ("deal_offer", "deal",
+         "Hi {{customer_name}}! Here's your offer for {{vehicle}} — final price Rs.{{deal_amount}}, discount Rs.{{discount}}. Let me know if you'd like to proceed."),
+        ("booking_confirm", "booking",
+         "Your booking for {{vehicle}} is confirmed at {{branch}}! Our team will keep you posted on delivery."),
+        ("delivery_thankyou", "delivery",
+         "Congratulations {{customer_name}}! Your {{vehicle}} is delivered. Enjoy the ride and reach out anytime."),
+        ("feedback_5d", "feedback",
+         "Hi {{customer_name}}! How has your {{vehicle}} been so far? We'd love your feedback."),
+        ("rc_reminder_45d", "reminder",
+         "Hi {{customer_name}}, your RC for the {{vehicle}} should be ready. Please visit {{branch}} to collect."),
+        ("lost_reengage", "reengage",
+         "Hi {{customer_name}}, still thinking about {{vehicle}}? We have a new offer that might change your mind. Reply YES to know more."),
+    ]
+    for name, cat, body in default_templates:
+        existing = await db.wa_templates.find_one({"name": name})
+        if not existing:
+            await db.wa_templates.insert_one({
+                "id": str(uuid.uuid4()), "name": name, "category": cat,
+                "message_type": "text", "body": body, "media_url": None,
+                "active": True, "created_at": now_iso(), "updated_at": now_iso(),
+            })
+
     # Sample leads
     count = await db.leads.count_documents({})
     if count == 0:
@@ -2894,6 +3576,12 @@ async def get_constants():
         "payment_statuses": PAYMENT_STATUSES,
         "finance_statuses": FINANCE_STATUSES,
         "exchange_conditions": EXCHANGE_CONDITIONS,
+        "wa_events": WA_EVENTS,
+        "wa_message_types": WA_MESSAGE_TYPES,
+        "wa_statuses": WA_STATUSES,
+        "wa_reply_tags": WA_REPLY_TAGS,
+        "campaign_types": CAMPAIGN_TYPES,
+        "campaign_statuses": CAMPAIGN_STATUSES,
         "roles": ROLES,
         "config": {
             "discount_approval_threshold": DISCOUNT_APPROVAL_THRESHOLD,
