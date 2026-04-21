@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 9 — Servall CRM drill-down dashboards, Emergent badge removal, Branch/User detail pages, mobile cards, charts, filter chips. Tested end-to-end. Backend: 14/14 pytest (/app/backend/tests/test_iter9_drilldown.py) PASS — badge + 'Made with Emergent' string are 100% absent from GET /; /manifest.json and /service-worker.js both 200; GET /api/branches/{id} and GET /api/branches/{id}/performance return full KPIs; GET /api/users/{id}/performance returns KPIs; GET /api/leads?branch_id=X filters correctly; GET /api/leads?stage=Lost filters correctly. RBAC verified at API level: super_admin sees all (3 branches, 213+ leads), admin@dealer.com only sees own branch (Bilimora) and CANNOT bypass via ?branch_id=<otherBranch> (backend silently filters to own branch — no 403, but zero leakage confirmed), sales1@dealer.com only sees leads where assigned_to==self. Frontend (Playwright, desktop 1280x800 + mobile 390x844): Dashboard super_admin shows stat-total/converted/lost/conv-rate/deals/avg-disc/pending/at-risk-banner + all 9 funnel-<Stage> blocks + loss-card-link + branch-compare-bar + 3 branch-cmp-row-<id> + 16 perf-row-<id>. Clicks verified: stat-total→/leads, stat-lost→/leads?stage=Lost (chip-stage + active-filter-chips visible + subtitle contains 'filtered'), chip-stage clears filter, funnel-Inquiry→/leads?stage=Inquiry, loss-card-link→/leads?stage=Lost, branch-cmp-row-<id>→/branches/<id>, perf-row-<id>→/users/<id>. /branches/:id (BranchDetail) renders: page-back-btn, branch-stat-total/converted/lost/conv, branch-funnel, branch-team with 15 branch-exec-<id>, branch-loss, branch-sources, branch-recent. /users/:id (UserDetail) renders: page-back-btn, user-stat-total/conv/lost/rate/fu/pending, user-funnel, user-loss, user-timeline, user-leads. Back button returns to /dashboard. /branches desktop: 3 branch-row-<id> click → /branches/:id; mobile: 3 branch-card-<id> click → /branches/:id. /users desktop: 18 user-row-<id> click → /users/:id; mobile: 18 user-card-<id> click → /users/:id. /funnel: 11 funnel-col-link-<Stage> → /leads?stage=<Stage>. FAB fab-new-lead, guide-btn, lang-en, lang-gu all present. bottom-nav-tasks and bottom-nav-whatsapp now navigate (badge removal cleared previous overlap HIGH bug from iteration_8). Admin login + /leads renders Bilimora-only leads. No critical regressions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_drilldown.py",
+    "/app/test_reports/pytest/pytest_results_iter9.xml"
+  ],
+  "action_items": [
+    "OPTIONAL hardening: /api/leads?branch_id=<otherBranch> for an admin silently returns own-branch leads (zero leakage, but also no explicit 403). Consider returning HTTP 403 'Forbidden: cross-branch access' so clients fail fast instead of showing stale data. Today's behaviour is safe (no data leak) but silent.",
+    "OPTIONAL: Dashboard stat-card labels on mobile 390px still truncate on some labels ('CONVERSIO…' etc.) — carry-over from iter8, not blocking.",
+    "OPTIONAL: Carry-over from iter8 — add DialogTitle (VisuallyHidden) to the Change-Stage dialog on LeadDetail to silence Radix a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "Emergent badge removal verified: document.getElementById('emergent-badge')=null AND 'Made with Emergent' text absent in raw HTML response — iter8 HIGH bug (bottom-nav-tasks/whatsapp overlap) is resolved as a side-effect.",
+    "Admin RBAC enforcement is good at the data layer (no cross-branch leakage) but lacks an explicit 403 response when an admin supplies ?branch_id=<other>. Consider: if request.user.role=='admin' and branch_id and branch_id != user.branch_id → 403.",
+    "BranchDetail/UserDetail aggregate funnel/loss/sources CLIENT-SIDE from GET /api/leads?branch_id=X or assigned_to=X. For branches with 1000+ leads this could be slow on mobile. Consider server-side /api/branches/{id}/performance already returning pre-aggregated funnel+loss_reasons+sources so client just renders.",
+    "16 perf-row-<id> rendered on super_admin dashboard — for 50+ users this will be a long list. Consider pagination or top-N.",
+    "server.py still large (>4000 lines) — splitting debt carry-over from iter8."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_drilldown.py (NEW — 14 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 drill-down + RBAC + badge + PWA)",
+    "frontend": "100% — all 28 drill-down flows + filter chips + mobile cards + back button + bottom-nav (tasks/whatsapp now clickable post badge removal) verified."
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123 (Bilimora), sales1@dealer.com/sales123 (Bilimora) — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "No new seed data. Reused 213 leads / 3 branches / 18 users already seeded. Admin isolation and sales isolation verified against live seed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend cumulative regression: backend_test.py + test_modules_3_4/5_6/7_8/9_10/11_12/13_14.py + test_strict_funnel.py + test_iter9_drilldown.py. Iteration 9 added drill-down: /api/branches/{id}, /api/branches/{id}/performance, /api/users/{id}/performance. Routes added: /branches/:id, /users/:id. New testids: stat-*, branch-cmp-row-<id>, perf-row-<id>, funnel-<Stage>, loss-card-link, branch-compare-bar, page-back-btn (via PageHeader), branch-stat-*, branch-funnel, branch-team, branch-exec-<id>, branch-loss, branch-sources, branch-recent, user-stat-*, user-funnel, user-loss, user-timeline, user-leads, branch-card-<id>, branch-row-<id>, user-card-<id>, user-row-<id>, funnel-col-link-<Stage>, active-filter-chips, chip-stage, chip-branch, chip-assignee, chip-source, chip-priority, clear-all-chips. Leads page supports useSearchParams; navigating /leads?stage=<X> auto-applies filter and shows chip + 'filtered' subtitle. Emergent badge is fully removed — do NOT expect 'emergent-badge' DOM id or 'Made with Emergent' text in HTML response; the iter8 bottom-nav overlap HIGH bug is resolved."
+}

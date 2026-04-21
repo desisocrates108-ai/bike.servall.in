@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
@@ -13,20 +13,27 @@ import {
 } from "../components/ui/select";
 
 const ANY = "__ANY__";
+const FILTER_KEYS = ["source", "stage", "priority", "assigned_to", "branch_id"];
 
 export default function Leads() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const nav = useNavigate();
+  const [qs, setQs] = useSearchParams();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [constants, setConstants] = useState(null);
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [filters, setFilters] = useState({
-    source: "", stage: "", priority: "", assigned_to: "", branch_id: "",
-    followup_due_today: false, search: "",
-  });
+  const [filters, setFilters] = useState(() => ({
+    source: qs.get("source") || "",
+    stage: qs.get("stage") || "",
+    priority: qs.get("priority") || "",
+    assigned_to: qs.get("assigned_to") || "",
+    branch_id: qs.get("branch_id") || "",
+    followup_due_today: qs.get("followup_due_today") === "1",
+    search: qs.get("search") || "",
+  }));
 
   const load = async () => {
     setLoading(true);
@@ -46,7 +53,17 @@ export default function Leads() {
     api.get("/branches").then((r) => setBranches(r.data));
   }, []);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [JSON.stringify(filters)]);
+  useEffect(() => {
+    load();
+    // Keep URL in sync with filters (for back/share)
+    const next = {};
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === "" || v === false || v == null) return;
+      next[k] = typeof v === "boolean" ? (v ? "1" : "") : String(v);
+    });
+    setQs(next, { replace: true });
+    /* eslint-disable-next-line */
+  }, [JSON.stringify(filters)]);
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const branchMap = useMemo(() => Object.fromEntries(branches.map((b) => [b.id, b])), [branches]);
@@ -56,12 +73,34 @@ export default function Leads() {
   const clearFilters = () =>
     setFilters({ source: "", stage: "", priority: "", assigned_to: "", branch_id: "", followup_due_today: false, search: "" });
 
+  const hasActiveFilter = useMemo(
+    () => Object.entries(filters).some(([k, v]) => k !== "search" && v !== "" && v !== false && v != null),
+    [filters]
+  );
+
+  const activeFilterChips = useMemo(() => {
+    const chips = [];
+    if (filters.stage) chips.push({ k: "stage", label: `Stage: ${filters.stage}` });
+    if (filters.source) chips.push({ k: "source", label: `Source: ${filters.source}` });
+    if (filters.priority) chips.push({ k: "priority", label: `Priority: ${filters.priority}` });
+    if (filters.assigned_to) {
+      const u = userMap[filters.assigned_to];
+      chips.push({ k: "assigned_to", label: `Exec: ${u?.name || filters.assigned_to.slice(0, 6)}` });
+    }
+    if (filters.branch_id) {
+      const b = branchMap[filters.branch_id];
+      chips.push({ k: "branch_id", label: `Branch: ${b?.name || filters.branch_id.slice(0, 6)}` });
+    }
+    if (filters.followup_due_today) chips.push({ k: "followup_due_today", label: "Due today" });
+    return chips;
+  }, [filters, userMap, branchMap]);
+
   return (
     <>
       <PageHeader
         title={t("nav.leads")}
-        subtitle={`${leads.length} ${t("common.total", "total").toLowerCase()}`}
-        showBack={false}
+        subtitle={`${leads.length} ${t("common.total", "total").toLowerCase()}${hasActiveFilter ? " · filtered" : ""}`}
+        showBack={hasActiveFilter}
         sticky
         right={
           <Link to="/leads/new" className="hidden sm:block">
@@ -74,6 +113,27 @@ export default function Leads() {
       <div className="p-3 sm:p-6 max-w-[1500px] mx-auto w-full">
 
       <div className="bg-white border border-zinc-200 rounded-sm p-3 mb-3">
+        {activeFilterChips.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3" data-testid="active-filter-chips">
+            {activeFilterChips.map((c) => (
+              <button
+                key={c.k}
+                onClick={() => setF(c.k, c.k === "followup_due_today" ? false : "")}
+                className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-sm bg-brand/10 text-brand hover:bg-brand/20"
+                data-testid={`chip-${c.k}`}
+              >
+                {c.label} <span className="text-brand/70">×</span>
+              </button>
+            ))}
+            <button
+              onClick={clearFilters}
+              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 ml-1"
+              data-testid="clear-all-chips"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 items-center">
           <div className="flex-1 min-w-[220px] relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />

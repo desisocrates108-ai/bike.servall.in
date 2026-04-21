@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import PageHeader from "../components/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
@@ -11,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "../components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, BarChart3, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight } from "lucide-react";
 
 const emptyForm = () => ({
   name: "", code: "", city: "", address: "",
@@ -21,15 +24,14 @@ const emptyForm = () => ({
 });
 
 export default function Branches() {
+  const { t } = useTranslation();
   const { user } = useAuth();
+  const nav = useNavigate();
   const [branches, setBranches] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
-
-  const [perfOpen, setPerfOpen] = useState(false);
-  const [perf, setPerf] = useState(null);
 
   const isSuper = user?.role === "super_admin";
 
@@ -90,32 +92,53 @@ export default function Branches() {
     }
   };
 
-  const showPerf = async (bid) => {
-    try {
-      const { data } = await api.get(`/branches/${bid}/performance`);
-      setPerf(data);
-      setPerfOpen(true);
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail));
-    }
-  };
-
   return (
-    <div className="p-6 md:p-10 max-w-[1400px]">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <div className="overline mb-2">Operations</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight">Branches</h1>
-          <p className="text-sm text-zinc-500 mt-2">Point-of-sale (POS) branch management. Deactivate a branch to freeze new lead creation without deleting history.</p>
-        </div>
-        {isSuper && (
-          <Button onClick={openNew} className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="add-branch-btn">
-            <Plus className="w-4 h-4 mr-1" /> New branch
-          </Button>
-        )}
+    <>
+      <PageHeader
+        title={t("nav.branches")}
+        subtitle={t("branches.sub", "Point-of-sale (POS) branch management")}
+        showBack={false}
+        sticky
+        right={
+          isSuper && (
+            <Button onClick={openNew} className="rounded-sm bg-brand hover:bg-brand-dark font-bold h-10" data-testid="add-branch-btn">
+              <Plus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">New branch</span>
+            </Button>
+          )
+        }
+      />
+      <div className="p-3 sm:p-6 max-w-[1400px] mx-auto w-full">
+
+      {/* MOBILE: cards */}
+      <div className="sm:hidden space-y-2">
+        {branches.length === 0 && <div className="py-12 text-center text-sm text-zinc-400">No branches.</div>}
+        {branches.map((b) => (
+          <div key={b.id} className="bg-white border border-zinc-200 rounded-sm p-3 flex items-center justify-between gap-2" data-testid={`branch-card-${b.id}`}>
+            <Link to={`/branches/${b.id}`} className="flex-1 min-w-0 active:bg-zinc-50 -m-3 p-3 rounded-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold bg-zinc-100 rounded-sm px-1.5 py-0.5">{b.code || "—"}</span>
+                <span className="font-semibold truncate">{b.name}</span>
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-zinc-500">
+                <span>{b.city || "—"}</span>
+                <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold uppercase ${b.is_active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}`}>
+                  {b.is_active ? "Active" : "Inactive"}
+                </span>
+              </div>
+            </Link>
+            {isSuper && (
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" className="rounded-sm" onClick={() => openEdit(b)} data-testid={`edit-branch-${b.id}`}><Pencil className="w-3 h-3" /></Button>
+                <Button size="sm" variant="outline" className="rounded-sm border-rose-200 text-rose-700" onClick={() => remove(b.id)} data-testid={`del-branch-${b.id}`}><Trash2 className="w-3 h-3" /></Button>
+              </div>
+            )}
+            <ChevronRight className="w-4 h-4 text-zinc-400 sm:hidden" />
+          </div>
+        ))}
       </div>
 
-      <div className="bg-white border border-zinc-200 rounded-sm overflow-hidden">
+      {/* DESKTOP: table */}
+      <div className="hidden sm:block bg-white border border-zinc-200 rounded-sm overflow-hidden">
         <table className="data-table w-full">
           <thead>
             <tr>
@@ -125,9 +148,14 @@ export default function Branches() {
           <tbody>
             {branches.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-zinc-400">No branches.</td></tr>}
             {branches.map((b) => (
-              <tr key={b.id} data-testid={`branch-row-${b.id}`}>
+              <tr
+                key={b.id}
+                data-testid={`branch-row-${b.id}`}
+                onClick={() => nav(`/branches/${b.id}`)}
+                className="cursor-pointer hover:bg-zinc-50"
+              >
                 <td className="font-mono text-sm font-bold">{b.code || "—"}</td>
-                <td className="font-semibold">{b.name}</td>
+                <td className="font-semibold text-brand hover:underline">{b.name}</td>
                 <td>{b.city || "—"}</td>
                 <td>{adminMap[b.assigned_admin_id]?.name || <span className="text-zinc-400">Unassigned</span>}</td>
                 <td>
@@ -136,10 +164,7 @@ export default function Branches() {
                   </span>
                 </td>
                 <td className="text-xs">{b.allow_login_when_inactive ? "Allowed" : "Blocked"}</td>
-                <td className="flex gap-1">
-                  <Button size="sm" variant="outline" className="rounded-sm" onClick={() => showPerf(b.id)} data-testid={`perf-branch-${b.id}`}>
-                    <BarChart3 className="w-3 h-3" />
-                  </Button>
+                <td className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                   {isSuper && (
                     <>
                       <Button size="sm" variant="outline" className="rounded-sm" onClick={() => openEdit(b)} data-testid={`edit-branch-${b.id}`}>
@@ -213,41 +238,8 @@ export default function Branches() {
         </DialogContent>
       </Dialog>
 
-      {/* Performance dialog */}
-      <Dialog open={perfOpen} onOpenChange={setPerfOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Branch performance</DialogTitle>
-            <DialogDescription>Lifetime counters across leads and revenue.</DialogDescription>
-          </DialogHeader>
-          {perf && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-zinc-500" />
-                <div className="font-semibold text-lg">{perf.name}</div>
-                <span className="font-mono text-xs text-zinc-500">({perf.code})</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ["leads_total", "Total leads"],
-                  ["leads_delivered", "Conversions"],
-                  ["leads_lost", "Lost"],
-                  ["active_users", "Active users"],
-                  ["conversion_rate_pct", "Conv. rate %"],
-                  ["revenue", "Revenue (₹)"],
-                ].map(([k, label]) => (
-                  <div key={k} className="bg-zinc-50 border border-zinc-200 rounded-sm p-3">
-                    <div className="overline">{label}</div>
-                    <div className="font-mono text-2xl font-bold mt-1" data-testid={`branch-perf-${k}`}>
-                      {k === "revenue" ? Number(perf[k] || 0).toLocaleString("en-IN") : (perf[k] ?? 0)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+      {/* Performance removed — click row to open /branches/:id detail page */}
+      </div>
+    </>
   );
 }

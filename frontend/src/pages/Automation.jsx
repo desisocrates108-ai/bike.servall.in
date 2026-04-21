@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import PageHeader from "../components/PageHeader";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -14,6 +16,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Pencil, Zap } from "lucide-react";
 
 export default function Automation() {
+  const { t: tr } = useTranslation();
   const [tab, setTab] = useState("templates");
   const [templates, setTemplates] = useState([]);
   const [rules, setRules] = useState([]);
@@ -89,16 +92,15 @@ export default function Automation() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-[1400px]">
-      <div className="overline mb-2">Admin</div>
-      <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight mb-8">Automation</h1>
-
-      <div className="flex gap-2 mb-6 border-b border-zinc-200">
+    <>
+      <PageHeader title={tr("nav.automation")} subtitle="Templates & rules" sticky />
+      <div className="p-3 sm:p-6 max-w-[1400px] mx-auto w-full">
+      <div className="flex gap-2 mb-4 border-b border-zinc-200 overflow-x-auto no-scrollbar">
         {[["templates", "Templates"], ["rules", "Rules"]].map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500"}`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === k ? "border-brand text-brand" : "border-transparent text-zinc-500"}`}
             data-testid={`tab-${k}`}
           >
             {l}
@@ -281,6 +283,7 @@ export default function Automation() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </>
   );
 }

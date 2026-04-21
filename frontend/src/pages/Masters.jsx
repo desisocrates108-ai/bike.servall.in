@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import PageHeader from "../components/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
@@ -70,10 +72,12 @@ export default function Masters() {
     catch (e) { toast.error(formatApiErrorDetail(e.response?.data?.detail)); }
   };
 
+  const { t } = useTranslation();
+
   return (
-    <div className="p-6 md:p-10 max-w-[1300px]">
-      <div className="overline mb-2">Configuration</div>
-      <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight mb-8">Master Data</h1>
+    <>
+      <PageHeader title={t("nav.masters")} subtitle="Configuration — brands, models, variants, colors" sticky />
+      <div className="p-3 sm:p-6 max-w-[1300px] mx-auto w-full">
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Pane title="Branches">
@@ -160,6 +164,7 @@ export default function Masters() {
           )}
         </Pane>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

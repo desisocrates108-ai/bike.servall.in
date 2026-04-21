@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import PageHeader from "../components/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
@@ -12,7 +15,7 @@ import {
 } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { roleLabel } from "../lib/labels";
-import { UserPlus, Pencil, BarChart3 } from "lucide-react";
+import { UserPlus, Pencil, ChevronRight } from "lucide-react";
 
 const emptyForm = () => ({
   email: "", name: "", password: "", phone: "",
@@ -22,7 +25,9 @@ const emptyForm = () => ({
 });
 
 export default function Users() {
+  const { t } = useTranslation();
   const { user } = useAuth();
+  const nav = useNavigate();
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
   const [open, setOpen] = useState(false);
@@ -33,9 +38,6 @@ export default function Users() {
   const [filterBranch, setFilterBranch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [qText, setQText] = useState("");
-
-  const [perfOpen, setPerfOpen] = useState(false);
-  const [perf, setPerf] = useState(null);
 
   const reload = async () => {
     const params = new URLSearchParams();
@@ -111,27 +113,20 @@ export default function Users() {
     }
   };
 
-  const showPerf = async (uid) => {
-    try {
-      const { data } = await api.get(`/users/${uid}/performance`);
-      setPerf(data);
-      setPerfOpen(true);
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail));
-    }
-  };
-
   return (
-    <div className="p-6 md:p-10 max-w-[1400px]">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <div className="overline mb-2">Team</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight">Users</h1>
-        </div>
-        <Button onClick={openNew} className="rounded-sm bg-brand hover:bg-brand-dark font-bold" data-testid="add-user-btn">
-          <UserPlus className="w-4 h-4 mr-1" /> Add user
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        title={t("nav.users")}
+        subtitle={`${users.length} ${t("common.total", "total").toLowerCase()}`}
+        showBack={false}
+        sticky
+        right={
+          <Button onClick={openNew} className="rounded-sm bg-brand hover:bg-brand-dark font-bold h-10" data-testid="add-user-btn">
+            <UserPlus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Add user</span>
+          </Button>
+        }
+      />
+      <div className="p-3 sm:p-6 max-w-[1400px] mx-auto w-full">
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -168,7 +163,7 @@ export default function Users() {
         </Select>
       </div>
 
-      <div className="bg-white border border-zinc-200 rounded-sm overflow-hidden">
+      <div className="bg-white border border-zinc-200 rounded-sm overflow-hidden hidden sm:block">
         <table className="data-table w-full">
           <thead>
             <tr>
@@ -178,29 +173,54 @@ export default function Users() {
           <tbody>
             {users.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-zinc-400">No users.</td></tr>}
             {users.map((u) => (
-              <tr key={u.id} data-testid={`user-row-${u.id}`}>
-                <td className="font-semibold">{u.name}</td>
+              <tr
+                key={u.id}
+                data-testid={`user-row-${u.id}`}
+                onClick={() => nav(`/users/${u.id}`)}
+                className="cursor-pointer hover:bg-zinc-50"
+              >
+                <td className="font-semibold text-brand hover:underline">{u.name}</td>
                 <td className="font-mono text-sm">{u.phone || "—"}</td>
                 <td className="font-mono text-sm">{u.email}</td>
-                <td>{roleLabel(u.role)}</td>
+                <td>{roleLabel(u.role, t)}</td>
                 <td>{branchMap[u.branch_id]?.name || "—"}</td>
                 <td>
                   <span className={`inline-block px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase ${u.is_active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
-                <td className="flex gap-1">
+                <td className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="outline" className="rounded-sm" onClick={() => openEdit(u)} data-testid={`edit-user-${u.id}`}>
                     <Pencil className="w-3 h-3" />
-                  </Button>
-                  <Button size="sm" variant="outline" className="rounded-sm" onClick={() => showPerf(u.id)} data-testid={`perf-user-${u.id}`}>
-                    <BarChart3 className="w-3 h-3" />
                   </Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* MOBILE: cards */}
+      <div className="sm:hidden space-y-2">
+        {users.length === 0 && <div className="py-12 text-center text-zinc-400 text-sm">No users.</div>}
+        {users.map((u) => (
+          <div key={u.id} className="bg-white border border-zinc-200 rounded-sm p-3 flex items-center gap-2" data-testid={`user-card-${u.id}`}>
+            <Link to={`/users/${u.id}`} className="flex-1 min-w-0 active:bg-zinc-50 -m-3 p-3 rounded-sm">
+              <div className="font-semibold truncate">{u.name}</div>
+              <div className="text-xs text-zinc-500 font-mono truncate">{u.email}</div>
+              <div className="flex flex-wrap gap-1.5 mt-1.5 text-xs">
+                <span className="px-1.5 py-0.5 bg-zinc-100 rounded-sm">{roleLabel(u.role, t)}</span>
+                {u.branch_id && <span className="px-1.5 py-0.5 bg-zinc-100 rounded-sm">{branchMap[u.branch_id]?.name || "—"}</span>}
+                <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-bold uppercase ${u.is_active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                  {u.is_active ? "Active" : "Inactive"}
+                </span>
+              </div>
+            </Link>
+            <Button size="sm" variant="outline" className="rounded-sm" onClick={() => openEdit(u)} data-testid={`edit-user-m-${u.id}`}>
+              <Pencil className="w-3 h-3" />
+            </Button>
+          </div>
+        ))}
       </div>
 
       {/* Create/Edit Dialog */}
@@ -298,35 +318,8 @@ export default function Users() {
         </DialogContent>
       </Dialog>
 
-      {/* Performance Dialog */}
-      <Dialog open={perfOpen} onOpenChange={setPerfOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>User performance</DialogTitle>
-            <DialogDescription>Lifetime counters across leads and follow-ups.</DialogDescription>
-          </DialogHeader>
-          {perf && (
-            <div className="space-y-3">
-              <div className="font-semibold text-lg">{perf.name}</div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ["leads_total", "Leads handled"],
-                  ["leads_delivered", "Conversions"],
-                  ["leads_lost", "Lost"],
-                  ["leads_pending", "Pending"],
-                  ["followups_total", "Follow-ups"],
-                  ["conversion_rate_pct", "Conv. rate %"],
-                ].map(([k, label]) => (
-                  <div key={k} className="bg-zinc-50 border border-zinc-200 rounded-sm p-3">
-                    <div className="overline">{label}</div>
-                    <div className="font-mono text-2xl font-bold mt-1" data-testid={`perf-${k}`}>{perf[k] ?? 0}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+      {/* Performance → now click user row to open /users/:id detail */}
+      </div>
+    </>
   );
 }

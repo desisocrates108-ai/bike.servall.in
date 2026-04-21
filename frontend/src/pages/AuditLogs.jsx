@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import PageHeader from "../components/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
@@ -64,25 +66,22 @@ export default function AuditLogs() {
     // eslint-disable-next-line
   }, []);
 
+  const { t } = useTranslation();
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
   return (
-    <div className="p-6 md:p-10 max-w-[1400px]">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <div className="overline mb-2">Security</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight flex items-center gap-3">
-            <ScrollText className="w-8 h-8 text-zinc-400" /> Audit Logs
-          </h1>
-          <p className="text-sm text-zinc-500 mt-2">
-            Append-only trail of every sensitive action — login attempts, lead changes, deals closed.
-            {user?.role === "admin" && " You see your branch activity only."}
-          </p>
-        </div>
-        <Button onClick={reload} variant="outline" className="rounded-sm" disabled={loading} data-testid="audit-refresh">
-          <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        title={t("nav.audit_logs")}
+        subtitle={user?.role === "admin" ? "Branch activity" : "All system activity"}
+        sticky
+        right={
+          <Button onClick={reload} variant="outline" className="rounded-sm h-10" disabled={loading} data-testid="audit-refresh">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        }
+      />
+      <div className="p-3 sm:p-6 max-w-[1400px] mx-auto w-full">
 
       {/* Filters */}
       <div className="bg-white border border-zinc-200 rounded-sm p-4 mb-4">
@@ -170,6 +169,7 @@ export default function AuditLogs() {
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

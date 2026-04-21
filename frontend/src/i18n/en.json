@@ -170,6 +170,17 @@
     "export_excel": "Export Excel",
     "export_pdf": "Export PDF"
   },
+  "tasks": {
+    "sub": "Follow-up queue",
+    "today": "Today",
+    "missed": "Missed",
+    "upcoming": "Upcoming",
+    "at_risk": "At Risk",
+    "empty": "No tasks here."
+  },
+  "branches": {
+    "sub": "POS branch management"
+  },
   "wa": {
     "subtitle": "Templates, automation, and bulk campaigns",
     "templates": "Active Templates",

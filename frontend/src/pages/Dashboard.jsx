@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +9,7 @@ import {
   AlertTriangle, CalendarClock, BadgePercent, Gavel, PhoneCall,
   ArrowRight, Target, BarChart3, Lightbulb, TrendingDown,
 } from "lucide-react";
+import { BarChart as SimpleBarChart } from "../components/Charts";
 
 const Card = ({ children, className = "", testid }) => (
   <div className={`bg-white border border-zinc-200 rounded-sm p-4 sm:p-5 ${className}`} data-testid={testid}>
@@ -66,6 +67,7 @@ const ActionTile = ({ to, icon: Icon, title, desc, tone = "brand", testid }) => 
 export default function Dashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const nav = useNavigate();
   const [summary, setSummary] = useState(null);
   const [perf, setPerf] = useState([]);
   const [branchCmp, setBranchCmp] = useState([]);
@@ -190,16 +192,16 @@ export default function Dashboard() {
         {isAdmin && (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              <Stat label={t("dashboard.total_leads")} value={summary.total_leads} icon={TrendingUp} testid="stat-total" />
-              <Stat label={t("dashboard.converted")} value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" />
-              <Stat label={t("dashboard.lost")} value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" />
+              <Stat label={t("dashboard.total_leads")} value={summary.total_leads} icon={TrendingUp} testid="stat-total" linkTo="/leads" />
+              <Stat label={t("dashboard.converted")} value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" linkTo="/leads?stage=Delivery" />
+              <Stat label={t("dashboard.lost")} value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" linkTo="/leads?stage=Lost" />
               <Stat label={`${t("dashboard.converted")} %`} value={`${summary.conversion_rate}%`} icon={BadgePercent} tone="info" testid="stat-conv-rate" />
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               <Stat label={t("dashboard.followups_today")} value={today} icon={Clock} testid="stat-due-today" linkTo="/tasks?kind=today" />
               <Stat label={t("dashboard.missed")} value={overdue} icon={AlertTriangle} tone="danger" testid="stat-missed" linkTo="/tasks?kind=missed" />
               <Stat label={t("dash.admin.at_risk", "At Risk")} value={atRisk} icon={AlertTriangle} tone="warn" testid="stat-at-risk" linkTo="/tasks?kind=at_risk" />
-              <Stat label={t("dash.admin.deals", "Deals in Progress")} value={summary.deals_in_progress || 0} icon={Gavel} tone="info" testid="stat-deals-progress" />
+              <Stat label={t("dash.admin.deals", "Deals in Progress")} value={summary.deals_in_progress || 0} icon={Gavel} tone="info" testid="stat-deals-progress" linkTo="/leads?stage=Deal" />
             </div>
           </>
         )}
@@ -208,13 +210,13 @@ export default function Dashboard() {
         {isCEO && (
           <div data-testid="ceo-insights">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              <Stat label={t("dashboard.total_leads")} value={summary.total_leads} icon={TrendingUp} testid="stat-total" />
-              <Stat label={t("dashboard.converted")} value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" />
-              <Stat label={t("dashboard.lost")} value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" />
+              <Stat label={t("dashboard.total_leads")} value={summary.total_leads} icon={TrendingUp} testid="stat-total" linkTo="/leads" />
+              <Stat label={t("dashboard.converted")} value={summary.converted} icon={CheckCircle2} tone="ok" testid="stat-converted" linkTo="/leads?stage=Delivery" />
+              <Stat label={t("dashboard.lost")} value={summary.lost} icon={XCircle} tone="danger" testid="stat-lost" linkTo="/leads?stage=Lost" />
               <Stat label={t("dash.ceo.conv", "Conversion %")} value={`${summary.conversion_rate}%`} icon={Target} tone="brand" testid="stat-conv-rate" />
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-              <Stat label={t("dash.ceo.deals_progress", "Deals in Progress")} value={summary.deals_in_progress || 0} icon={Gavel} tone="info" testid="stat-deals" />
+              <Stat label={t("dash.ceo.deals_progress", "Deals in Progress")} value={summary.deals_in_progress || 0} icon={Gavel} tone="info" testid="stat-deals" linkTo="/leads?stage=Deal" />
               <Stat label={t("dash.ceo.pending", "Pending Approvals")} value={summary.pending_approvals || 0} icon={AlertTriangle} tone="warn" testid="stat-pending" />
               <Stat label={t("dash.ceo.avg_disc", "Avg Discount")} value={summary.avg_discount ? `₹${summary.avg_discount}` : "—"} icon={BadgePercent} testid="stat-avg-disc" />
             </div>
@@ -234,7 +236,12 @@ export default function Dashboard() {
             <div className="space-y-3">
               {sources.length === 0 && <div className="text-sm text-zinc-400">{t("dash.no_leads", "No leads yet.")}</div>}
               {sources.map(([src, n]) => (
-                <div key={src}>
+                <Link
+                  key={src}
+                  to={`/leads?source=${encodeURIComponent(src)}`}
+                  className="block hover:opacity-90 active:opacity-80"
+                  data-testid={`source-${src}`}
+                >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium">{src}</span>
                     <span className="font-mono text-sm text-zinc-500">{n}</span>
@@ -242,7 +249,7 @@ export default function Dashboard() {
                   <div className="h-2 bg-zinc-100 rounded-sm overflow-hidden">
                     <div className="h-full bg-brand" style={{ width: `${(n / maxSource) * 100}%` }} />
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </Card>
@@ -258,13 +265,15 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-2">
               {stages.length === 0 && <div className="text-sm text-zinc-400">{t("dash.no_leads", "No leads yet.")}</div>}
               {stages.map(([s, n]) => (
-                <div
+                <Link
                   key={s}
-                  className="flex items-center justify-between border border-zinc-200 rounded-sm px-3 py-2"
+                  to={`/leads?stage=${encodeURIComponent(s)}`}
+                  className="flex items-center justify-between border border-zinc-200 rounded-sm px-3 py-2 hover:border-brand active:bg-zinc-50"
+                  data-testid={`funnel-${s}`}
                 >
                   <span className="text-sm truncate">{s}</span>
                   <span className="font-mono font-bold">{n}</span>
-                </div>
+                </Link>
               ))}
             </div>
           </Card>
@@ -292,8 +301,13 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {perf.map((p) => (
-                    <tr key={p.user_id} data-testid={`perf-row-${p.user_id}`}>
-                      <td className="font-semibold">{p.name}</td>
+                    <tr
+                      key={p.user_id}
+                      data-testid={`perf-row-${p.user_id}`}
+                      onClick={() => nav(`/users/${p.user_id}`)}
+                      className="cursor-pointer hover:bg-zinc-50"
+                    >
+                      <td className="font-semibold text-brand hover:underline">{p.name}</td>
                       <td className="font-mono">{p.total_leads}</td>
                       <td className="font-mono text-emerald-700">{p.converted}</td>
                       <td className="font-mono text-rose-700">{p.lost}</td>
@@ -320,6 +334,16 @@ export default function Dashboard() {
                 {t("common.see_all", "See all")} →
               </Link>
             </div>
+
+            {/* Visual bar chart of leads by branch */}
+            <div className="mb-4">
+              <SimpleBarChart
+                data={branchCmp.map((b) => ({ id: b.branch_id, label: b.name, value: b.leads_total }))}
+                onClick={(d) => nav(`/branches/${d.id}`)}
+                testid="branch-compare-bar"
+              />
+            </div>
+
             <div className="overflow-x-auto">
               <table className="data-table w-full">
                 <thead>
@@ -335,8 +359,13 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {branchCmp.map((b) => (
-                    <tr key={b.branch_id} data-testid={`branch-cmp-row-${b.branch_id}`}>
-                      <td className="font-semibold">{b.name}</td>
+                    <tr
+                      key={b.branch_id}
+                      data-testid={`branch-cmp-row-${b.branch_id}`}
+                      onClick={() => nav(`/branches/${b.branch_id}`)}
+                      className="cursor-pointer hover:bg-zinc-50"
+                    >
+                      <td className="font-semibold text-brand hover:underline">{b.name}</td>
                       <td>
                         <span className={`inline-block px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase ${b.is_active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}`}>
                           {b.is_active ? t("common.active") : t("common.inactive")}
@@ -357,15 +386,22 @@ export default function Dashboard() {
 
         {/* CEO loss analysis */}
         {isCEO && summary.lost > 0 && (
-          <Card className="mt-4" testid="loss-card">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingDown className="w-4 h-4 text-rose-600" />
-              <div className="overline">{t("dash.ceo.loss", "Loss analysis")}</div>
-            </div>
-            <div className="text-sm text-zinc-600">
-              {t("dash.ceo.loss_desc", "{{lost}} leads lost out of {{total}}. Review reasons in lead details.", { lost: summary.lost, total: summary.total_leads })}
-            </div>
-          </Card>
+          <Link to="/leads?stage=Lost" className="block mt-4" data-testid="loss-card-link">
+            <Card testid="loss-card" className="hover:border-rose-300 active:bg-zinc-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-3">
+                  <TrendingDown className="w-5 h-5 text-rose-600 mt-0.5" />
+                  <div>
+                    <div className="overline">{t("dash.ceo.loss", "Loss analysis")}</div>
+                    <div className="text-sm text-zinc-700 mt-1">
+                      {t("dash.ceo.loss_desc", "{{lost}} leads lost out of {{total}}. Review reasons in lead details.", { lost: summary.lost, total: summary.total_leads })}
+                    </div>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-zinc-400" />
+              </div>
+            </Card>
+          </Link>
         )}
 
         {summary.at_risk > 0 && (

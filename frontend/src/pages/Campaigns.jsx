@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
+import PageHeader from "../components/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
@@ -143,17 +145,21 @@ export default function Campaigns() {
     Cancelled: "bg-rose-100 text-rose-700",
   };
 
+  const { t } = useTranslation();
+
   return (
-    <div className="p-6 md:p-10 max-w-[1400px]">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <div className="overline mb-2">Marketing</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight">Campaigns</h1>
-        </div>
-        <Button onClick={openNew} className="bg-brand hover:bg-brand-dark rounded-sm font-bold" data-testid="new-campaign-btn">
-          <Plus className="w-4 h-4 mr-1" /> New campaign
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        title={t("nav.campaigns")}
+        subtitle="Marketing — bulk WhatsApp"
+        sticky
+        right={
+          <Button onClick={openNew} className="bg-brand hover:bg-brand-dark rounded-sm font-bold h-10" data-testid="new-campaign-btn">
+            <Plus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">New campaign</span>
+          </Button>
+        }
+      />
+      <div className="p-3 sm:p-6 max-w-[1400px] mx-auto w-full">
 
       <div className="bg-white border border-zinc-200 rounded-sm overflow-hidden">
         <table className="data-table w-full">
@@ -322,7 +328,8 @@ export default function Campaigns() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </>
   );
 }
 

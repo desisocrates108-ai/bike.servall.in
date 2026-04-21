@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
+import PageHeader from "../components/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
 
 const Section = ({ title, desc, children }) => (
   <div className="bg-white border border-zinc-200 rounded-sm p-6 mb-4">
@@ -134,19 +135,12 @@ export default function LeadForm() {
     }
   };
 
+  const { t } = useTranslation();
+
   return (
-    <div className="p-6 md:p-10 max-w-[1200px]">
-      <button
-        onClick={() => nav(-1)}
-        className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 mb-4"
-        data-testid="back-btn"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
-      <div className="overline mb-2">New lead</div>
-      <h1 className="font-display text-3xl sm:text-4xl font-black tracking-tight mb-8">
-        Capture a new inquiry.
-      </h1>
+    <>
+      <PageHeader title={t("nav.new_lead")} subtitle="Capture a new inquiry" sticky />
+      <div className="p-3 sm:p-6 max-w-[1200px] mx-auto w-full">
 
       <form onSubmit={submit}>
         <Section title="Customer" desc="Basic details about the customer.">
@@ -355,6 +349,7 @@ export default function LeadForm() {
           </Button>
         </div>
       </form>
-    </div>
+      </div>
+    </>
   );
 }

@@ -17,6 +17,8 @@ import Automation from "./pages/Automation";
 import Branches from "./pages/Branches";
 import AuditLogs from "./pages/AuditLogs";
 import Whatsapp from "./pages/Whatsapp";
+import BranchDetail from "./pages/BranchDetail";
+import UserDetail from "./pages/UserDetail";
 import { Toaster } from "sonner";
 
 function App() {
@@ -37,6 +39,8 @@ function App() {
             <Route path="/whatsapp" element={<ProtectedRoute><Whatsapp /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute roles={["super_admin", "admin"]}><UsersPage /></ProtectedRoute>} />
             <Route path="/branches" element={<ProtectedRoute roles={["super_admin", "admin"]}><Branches /></ProtectedRoute>} />
+            <Route path="/branches/:id" element={<ProtectedRoute><BranchDetail /></ProtectedRoute>} />
+            <Route path="/users/:id" element={<ProtectedRoute><UserDetail /></ProtectedRoute>} />
             <Route path="/audit-logs" element={<ProtectedRoute roles={["super_admin", "admin"]}><AuditLogs /></ProtectedRoute>} />
             <Route path="/campaigns" element={<ProtectedRoute roles={["super_admin", "admin"]}><Campaigns /></ProtectedRoute>} />
             <Route path="/automation" element={<ProtectedRoute roles={["super_admin", "admin"]}><Automation /></ProtectedRoute>} />
