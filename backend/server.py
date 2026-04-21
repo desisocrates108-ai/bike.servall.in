@@ -2487,6 +2487,7 @@ async def _queue_message(
     user: Optional[dict] = None,
     campaign_id: Optional[str] = None,
     scheduled_at: Optional[str] = None,
+    skip_guards: bool = False,
 ) -> Optional[dict]:
     if await _is_opted_out(lead["id"], lead.get("phone")):
         return None
@@ -2499,6 +2500,30 @@ async def _queue_message(
         media_url = media_url or tpl.get("media_url")
         all_vars = await _lead_variables(lead, variables)
         rendered = await _render_template(tpl.get("body", ""), all_vars)
+
+    # Safety: duplicate + rate-limit guard (skippable for campaign bulk sends which
+    # run their own 24h dedupe inside campaign_send)
+    if not skip_guards:
+        now_dt = datetime.now(timezone.utc)
+        # 1) Duplicate: identical outbound content to same lead in last 60s
+        dup_since = (now_dt - timedelta(seconds=60)).isoformat()
+        dup = await db.wa_messages.find_one({
+            "lead_id": lead["id"],
+            "direction": "outbound",
+            "content": rendered or "",
+            "created_at": {"$gte": dup_since},
+        })
+        if dup:
+            raise HTTPException(429, "Duplicate message: same content sent in the last 60s")
+        # 2) Rate limit: max 10 outbound messages per lead per minute
+        rate_since = (now_dt - timedelta(seconds=60)).isoformat()
+        recent_count = await db.wa_messages.count_documents({
+            "lead_id": lead["id"],
+            "direction": "outbound",
+            "created_at": {"$gte": rate_since},
+        })
+        if recent_count >= 10:
+            raise HTTPException(429, "Rate limit exceeded: max 10 messages per minute for this lead")
 
     doc = {
         "id": str(uuid.uuid4()),
@@ -2938,6 +2963,7 @@ async def campaign_send(cid: str, user: dict = Depends(require_roles("super_admi
             trigger="campaign",
             user=user,
             campaign_id=cid,
+            skip_guards=True,
         )
         sent += 1
 

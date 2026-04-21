@@ -1,0 +1,54 @@
+{
+  "summary": "Modules 11 (WhatsApp Automation) & 12 (Campaigns) end-to-end testing complete. Backend: 24/24 pytest tests pass in /app/backend/tests/test_modules_11_12.py covering WA templates CRUD + RBAC, automation rules CRUD + RBAC, inquiry_created event trigger (matching Hot lead creates outbound wa_message with trigger_source='inquiry_created', status=SENT; Warm lead creates none), manual send (opt-out blocks with 400, duplicate content within 60s returns 429, 11th msg in a minute returns 429, opt-in restores), inbound log persistence (direction='inbound', reply_tag validated, no _id leak), retry_count increments to WA_MAX_RETRIES=3 then 400, campaigns CRUD + RBAC (sales_executive blocked on GET and POST /campaigns), preview returns audience_count + sample (no _id), send flips status Draft→Running→Completed and 2nd send returns 400, stats exposes queued/sent/delivered/read/failed/responses/conversions, campaign-level dedupe yields exactly 1 wa_message per lead per campaign. Frontend (Playwright): admin sees sidebar Campaigns+Automation links and both routes load; sales_executive has both links hidden AND direct URL shows 'You don\\'t have permission to view this page.'; LeadDetail WhatsApp tab renders chat list, compose box, send button, template selector, opt-out toggle, inbound simulation input+tag+button — outbound send visible in green bubble with SENT tick; Automation page Templates tab create (Saved toast + row appears) and Rules tab renders with Add rule; Campaigns page New campaign dialog opens with audience filters (stages/priorities/sources/branches/purchase types).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/campaigns/{cid}/send", "issue": "Per-campaign dedupe has NO time window — `db.wa_messages.find_one({lead_id, campaign_id: cid})` with no created_at filter. Review spec explicitly says 'campaign-level 24h dedupe' but implementation is effectively lifetime dedupe (re-running the SAME campaign is already blocked because status flips to Completed, so the 24h-window semantics is never exercised). Either add `created_at: {\"$gte\": now-24h}` or remove the '24h' phrasing from the spec."},
+      {"endpoint": "GET /api/campaigns", "issue": "admin filter `{\"$or\":[{created_by:uid},{branch_scope:branch_id}]}` excludes super_admin-created cross-branch campaigns (branch_scope=None), so admins can't see global campaigns even though they are allowed to SEND them (send endpoint only checks role). Inconsistent visibility vs action."},
+      {"endpoint": "POST /api/leads/{lid}/wa-messages", "issue": "When _queue_message returns None due to opt-out, handler raises 400 'Message not sent (opted out or invalid template)' — conflates two distinct failures (opt-out vs unknown template). Suggest splitting into explicit 403 OPT_OUT vs 400 INVALID_TEMPLATE."},
+      {"endpoint": "GET /api/campaigns", "issue": "sales_executive gets 403 via inline `raise HTTPException(403)` inside handler instead of declarative `require_roles` dependency used by siblings — drift in RBAC style."},
+      {"endpoint": "GET /api/campaigns/{cid}/stats", "issue": "Uses `.distinct('lead_id', {campaign_id})` which is unbounded — for a campaign touching 100k+ leads this materialises the full array in memory; switch to an `$in` subquery or count aggregation."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Automation / Campaigns modals", "issues": ["React console warning: 'Missing Description or aria-describedby for DialogContent' — add DialogDescription for screen readers (accessibility nit, not blocking)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_modules_11_12.py",
+    "/app/test_reports/pytest/pytest_results_iter6.xml"
+  ],
+  "action_items": [
+    "Decide: either add a 24h window to the per-campaign dedupe `find_one` query in campaign_send (server.py ~2954) or remove the '24h' phrasing from the module spec.",
+    "Fix /api/campaigns visibility for admins so they can see global (branch_scope=None) campaigns created by super_admin, or explicitly document this as a scoping rule.",
+    "Disambiguate 400 error from POST /leads/{lid}/wa-messages when opt-out vs bad template.",
+    "Add DialogDescription to New Campaign and Add Template/Add Rule dialogs to silence the a11y warning.",
+    "Replace the inline 403 in list_campaigns with a proper `require_roles(...)` dependency, and/or introduce a role-aware visibility filter instead of raising 403 inside the handler."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 3634 lines now (+~1055 vs iter 4 for Modules 11/12). Splitting into routers/whatsapp.py, routers/campaigns.py and routers/automation.py is long overdue; maintenance and test isolation will regress further each module.",
+    "_queue_message has dual responsibilities — side-effect-free duplicate/rate guards + template resolution + DB insert + auto-SENT simulation. Extract the mock dispatcher into a worker stub so switching to real Twilio/WATI is a single DI swap, and so the auto-SENT path can be toggled off in prod.",
+    "Rate limit is hard-coded to 10/60s and duplicate window to 60s; should come from env (WA_RATE_LIMIT_PER_MIN, WA_DUP_WINDOW_SEC) to support future tuning per tenant.",
+    "fire_event wraps all rules sequentially with individual awaits; on a hot lead with N rules this serialises DB round-trips. Run with asyncio.gather for parallel dispatch.",
+    "_conditions_match doesn't support nested keys (e.g., 'exchange.condition') or operators (in/not-in/range); future rule authors will need them for real campaigns.",
+    "Campaign send has no pagination — `async for lead in db.leads.find(q)` pulls entire matching set into a single task. For a 50k-lead campaign this will hold a FastAPI request open for minutes. Convert to a background task (BackgroundTasks or a queue) returning 202 + campaign_id to poll via /stats.",
+    "WA outbound content is not escaped when rendered into chat UI. If templates allow arbitrary HTML in variables, chat bubbles could XSS. Confirm render path uses text-only (React text nodes do escape by default — verified visually but worth a lint pass).",
+    "Opt-out toggle DELETE /wa-optout is idempotent and requires `can_access_lead`, good. Consider audit logging opt-out/in actions to db.audit_logs for GDPR traceability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_modules_11_12.py (new, 24 tests all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24 Modules 11 & 12)",
+    "frontend": "100% of flows checked (admin nav, sales RBAC block, WA chat send, template create, campaign dialog open)"
+  },
+  "test_credentials": "superadmin@dealer.com/super123 (super_admin), admin@dealer.com/admin123 (admin, Bilimora), sales1@dealer.com/sales123 (sales_executive). Verified from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Tests create TEST_M1112_ leads + TEST_tpl_/TEST_rule_/TEST_camp_/TEST_dedupe_ prefixed entities in wa_templates, automation_rules, campaigns, wa_messages, wa_optouts. Frontend test also created one FE_tpl_<epoch> template. Prefix allows easy admin cleanup. Rate-limit test leaves 10 outbound msgs on one Warm lead per run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Cumulative regression suite now: test_modules_3_4.py (14, includes 62s sleep), test_modules_5_6.py (18), test_modules_7_8.py (19), test_modules_9_10.py (exists, not re-run this iter), test_modules_11_12.py (24). Lead source must be from the enum ['Walk-in','Tele-in','Digital Marketing','Social Media','WhatsApp','Email','Referral','Offline','Cold Calling'] — 'Website' is invalid. WA_MAX_RETRIES=3, duplicate window=60s, rate limit=10/60s (all hard-coded in server.py). Campaign audience filter 'audience=past_buyers' overrides stages to Delivery/Registration/Feedback. fire_event supports events: inquiry_created, stage_changed, lost_reengage (and more in WA_EVENTS constant).",
+  "rca of the issue": "No blocking bug found this iteration. One spec drift noted: campaign dedupe is per-(campaign,lead) lifetime, not 24h rolling, despite the review stating '24h dedupe'. Because re-sending the same campaign is already blocked by the Running/Completed status check, the difference is only observable in a manual status-rollback scenario — low practical impact but should be aligned with docs."
+}

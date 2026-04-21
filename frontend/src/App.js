@@ -12,6 +12,8 @@ import Funnel from "./pages/Funnel";
 import Tasks from "./pages/Tasks";
 import UsersPage from "./pages/Users";
 import Masters from "./pages/Masters";
+import Campaigns from "./pages/Campaigns";
+import Automation from "./pages/Automation";
 import { Toaster } from "sonner";
 
 function App() {
@@ -30,6 +32,8 @@ function App() {
             <Route path="/funnel" element={<ProtectedRoute><Funnel /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute roles={["super_admin", "admin"]}><UsersPage /></ProtectedRoute>} />
+            <Route path="/campaigns" element={<ProtectedRoute roles={["super_admin", "admin"]}><Campaigns /></ProtectedRoute>} />
+            <Route path="/automation" element={<ProtectedRoute roles={["super_admin", "admin"]}><Automation /></ProtectedRoute>} />
             <Route path="/masters" element={<ProtectedRoute roles={["super_admin"]}><Masters /></ProtectedRoute>} />
           </Routes>
         </BrowserRouter>
