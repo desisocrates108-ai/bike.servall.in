@@ -89,6 +89,46 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 - Commission tracking for sales execs
 
 ## Next Task List
-1. Collect user feedback on Modules 11 & 12 UX
+1. Collect user feedback on Modules 13 & 14 (users/branches/audit UX)
 2. Swap WhatsApp MOCK with Twilio/WATI when API keys ready
-3. Start P1 items in priority order
+3. Implement P1 items (kanban drag-and-drop, lead CSV export, advanced analytics)
+
+### 2026-04-21 — Modules 13 & 14 (19/19 backend tests + frontend E2E)
+- **Module 13 — Advanced User & Role Management**
+  - Extended `User` schema — `phone` (UNIQUE sparse index), `reporting_manager_id`, `joining_date`, `permissions` (schema-only, future-ready), existing `is_active`
+  - `POST/PUT /api/users` validate phone uniqueness and manager role (must be admin/super_admin)
+  - `GET /api/users` filters: `?role`, `?branch_id`, `?status=active|inactive`, `?q=` (name/email/phone search)
+  - `GET /api/users/{id}/performance` — leads_total / leads_lost / leads_delivered / leads_pending (not double-counting Delivery) / followups_total / conversion_rate_pct
+  - RBAC: sales_executive can only view own performance
+  - `GET /api/permissions/modules` returns catalog of CRM_MODULES × PERMISSION_ACTIONS (future-ready, not enforced)
+- **Module 14 — Advanced Branch/POS Management**
+  - Extended `Branch` schema — `code` (UNIQUE sparse), `city`, `assigned_admin_id`, `is_active`, `allow_login_when_inactive`
+  - Full CRUD on `/api/branches` with duplicate-code and admin-role validation
+  - DELETE blocked when linked users/leads exist
+  - `GET /api/branches/{id}/performance` — per-branch leads/conversions/lost/revenue (sum of Delivered booking `final_deal_price`)
+  - `GET /api/branches-compare` — super_admin only, cross-branch leaderboard
+  - **Inactive branch logic** (configurable per branch):
+    - `is_active=false` always blocks new lead creation (POST /leads → 403)
+    - `allow_login_when_inactive=false` also blocks login for users in that branch (→ 403 "Your branch is currently inactive")
+    - Default: `is_active=true`, `allow_login_when_inactive=true`
+- **Audit Logs (kept forever)**
+  - New `audit_logs` collection with indexes on created_at, actor_id, branch_id, action
+  - `log_audit()` helper — never raises, best-effort append
+  - Instrumented: login / login_failed / logout / lead_created / lead_updated / stage_changed / deal_closed / lead_lost / followup_created / user_{created,updated,deleted} / branch_{created,updated,deleted}
+  - `GET /api/audit-logs` with filters (user_id, action, entity_type, since, until, limit)
+  - RBAC: super_admin sees all, admin scoped to own branch_id, sales_executive → 403
+- **Seed updates**
+  - Each seeded user now has `phone`, `joining_date`, `reporting_manager_id` (sales → branch admin → super admin)
+  - Bilimora branch `assigned_admin_id` wired to Ravi Admin
+  - Safe backfill on re-seed for existing deployments
+- **Frontend**
+  - `/users` page rewritten — role/branch/status/search filters, edit dialog with phone/manager/joining date/active toggle, performance dialog
+  - `/branches` new standalone page — add/edit dialog with `code`, `city`, `assigned_admin`, `is_active` + `allow_login_when_inactive` toggles, performance dialog
+  - `/audit-logs` new page — filter panel (user, action, entity, date range) + tabular trail
+  - Dashboard — branch comparison card for super_admin (Leads/Converted/Lost/Conv%/Revenue)
+  - Sidebar: Branches + Audit Logs links under Admin for admin+super_admin
+
+## Next Task List
+1. Collect user feedback on Modules 13 & 14 (users/branches/audit UX)
+2. Swap WhatsApp MOCK with Twilio/WATI when API keys ready
+3. Implement P1 items (kanban drag-and-drop, lead CSV export, advanced analytics)

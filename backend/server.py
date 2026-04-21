@@ -908,7 +908,8 @@ async def user_performance(uid: str, user: dict = Depends(get_current_user)):
     leads_delivered = await db.leads.count_documents({"assigned_to": uid, "stage": {"$in": ["Delivery", "Registration", "Feedback"]}})
     followups_total = await db.followups.count_documents({"created_by": uid})
     pending = await db.leads.count_documents({
-        "assigned_to": uid, "stage": {"$nin": ["Lost", "Registration", "Feedback"]}
+        "assigned_to": uid,
+        "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}
     })
     conv_rate = round((leads_delivered / leads_total * 100), 1) if leads_total else 0.0
     return {
