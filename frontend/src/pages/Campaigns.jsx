@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Send, Users, TrendingUp, Trash2, Pencil } from "lucide-react";
@@ -208,7 +208,10 @@ export default function Campaigns() {
       {/* Create/Edit dialog */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditing(null); setForm(emptyForm()); } }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? "Edit" : "New"} campaign</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit" : "New"} campaign</DialogTitle>
+            <DialogDescription>Configure message, audience filters and schedule.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={submit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -279,7 +282,10 @@ export default function Campaigns() {
       {/* Preview dialog */}
       <Dialog open={!!preview} onOpenChange={(v) => !v && setPreview(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Audience preview</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Audience preview</DialogTitle>
+            <DialogDescription>Leads matching your targeting filters.</DialogDescription>
+          </DialogHeader>
           <div className="text-sm">
             <div className="font-mono text-3xl font-bold" data-testid="preview-count">{preview?.audience_count}</div>
             <div className="text-zinc-500 mt-1">leads match this campaign</div>
@@ -300,7 +306,10 @@ export default function Campaigns() {
       {/* Stats dialog */}
       <Dialog open={!!statsFor} onOpenChange={(v) => !v && setStatsFor(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Campaign stats</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Campaign stats</DialogTitle>
+            <DialogDescription>Delivery counters and engagement totals.</DialogDescription>
+          </DialogHeader>
           {stats && (
             <div className="grid grid-cols-3 gap-3">
               {["queued", "sent", "delivered", "read", "failed", "responses", "conversions"].map((k) => (

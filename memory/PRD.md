@@ -1,7 +1,7 @@
 # Two-Wheeler Dealership Sales CRM — PRD
 
 ## Original Problem Statement
-Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source tracking, assignment (manual + round-robin), inquiry → sales funnel management, follow-up scheduling, document uploads, role-based access (Super Admin / Admin / Sales Executive), and basic analytics.
+Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source tracking, assignment (manual + round-robin), inquiry → sales funnel management, follow-up scheduling, document uploads, role-based access (Super Admin / Admin / Sales Executive), and basic analytics — evolving into a 12-module suite ending with WhatsApp Automation and Marketing Campaigns.
 
 ## User Choices (confirmed)
 - **Auth:** JWT (email + password), cookies + Bearer token
@@ -9,61 +9,55 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 - **File storage:** Emergent Object Storage
 - **Lead auto-assignment:** Round-robin per branch
 - **Analytics depth:** Basic (per source, per stage, converted, lost, follow-ups due today)
+- **Language:** Hindi / English (Hinglish) for user communication
+- **WhatsApp provider:** MOCKED (auto-marks SENT in DB). Ready for Twilio/WATI drop-in.
 
 ## Architecture
-- **Backend:** FastAPI single-file `/app/backend/server.py`, MongoDB (motor), bcrypt + PyJWT, Emergent Object Storage via HTTP
-- **Frontend:** React + React Router + Tailwind + Shadcn UI, Sonner toasts, lucide icons, IBM Plex Sans / Outfit fonts
-- **DB:** `twowheeler_crm` — collections: users, branches, brands, vehicle_models, variants, colors, leads, followups, timeline, files, rr_counters
+- **Backend:** FastAPI single-file `/app/backend/server.py` (3.6k lines), MongoDB (motor), bcrypt + PyJWT, Emergent Object Storage via HTTP, Gemini 3 Flash Vision for OCR
+- **Frontend:** React + React Router + Tailwind + Shadcn UI, Sonner toasts, lucide icons
+- **DB:** `twowheeler_crm` — collections: users, branches, brands, vehicle_models, variants, colors, leads, followups, timeline, files, rr_counters, bookings, allotments, documents, payments, finance_cases, exchange_valuations, wa_templates, wa_messages, wa_optouts, automation_rules, campaigns, tasks, whatsapp_logs
 
 ## User Personas
-- **Super Admin** — Full access across all branches, manages master data (brands/models/variants/colors/branches) and users
-- **Branch Admin** — Manages all leads in assigned branch, can reassign leads within branch
-- **Sales Executive** — Sees only own leads, updates stages, logs follow-ups, uploads documents
+- **Super Admin** — Full access across all branches, manages master data and users, creates global campaigns & automation rules.
+- **Branch Admin** — Manages all leads in assigned branch, can reassign within branch, can manage/send campaigns and automation for branch.
+- **Sales Executive** — Sees only own leads, updates stages, logs follow-ups, sends manual WhatsApp, uploads documents. No access to campaigns/automation.
 
-## Core Requirements
-1. Lead capture with source, branch, priority, assignment
-2. Vehicle selection (brand → model → variant → color) from master data
-3. Conditional Exchange Vehicle form (photos, RC, condition, expected price)
-4. Deal + payment/finance details
-5. 10-stage funnel with validation rules (Deal/Booking/Registration/Lost prerequisites)
-6. Follow-up system with history + counter + due-today filter
-7. Document uploads to cloud storage (ID proof, RC, finance docs, etc.)
-8. Timeline logs for every significant event
-9. Dashboard analytics (leads by source, stage, converted/lost counts)
-10. Role-based data access enforced on every endpoint
+## What's Been Implemented
+### 2026-02-20 — Modules 1-10 (cumulative 151/151 backend tests)
+- Modules 1-2: Lead Source, Assignment, Inquiry Funnel
+- Modules 3-4: Follow-up (60s anti-spam, at-risk, tasks, perf analytics) + Deal Negotiation (₹5000 approval gate)
+- Modules 5-6: Booking (multi-entry payments) + Vehicle Allotment (unique chassis)
+- Modules 7-8: Documents + Gemini OCR (14 types, versioning, verify/reject, PII masking) + Delivery (OTP, checklist, accessories, challan)
+- Module 9: Payment & Finance (payment_type, auto payment_status, margin alerts, finance approval flow)
+- Module 10: Exchange System (valuation history, photos, net_payable auto-adjust)
+- Full RBAC across every endpoint
+- Frontend tabs for all above on Lead Detail
 
-## What's Been Implemented (2026-02-20)
-### Backend (cumulative 151/151 tests passing across iters 1-5)
-- JWT auth + RBAC (sales_executive / admin / super_admin)
-- Master data CRUD; Leads CRUD with round-robin, stage validation
-- **Module 3** — Follow-up & Call Tracking (7-field follow-up, 60s anti-spam, at-risk flag, tasks, performance analytics)
-- **Module 4** — Deal & Negotiation (ex-showroom, final price, ₹5000 approval threshold, negotiation history)
-- **Module 5** — Booking Management (multi-entry payments, confirm/cancel, auto-advance)
-- **Module 6** — Vehicle Allotment (unique chassis, auto-advance Delivery)
-- **Module 7** — Documents + Gemini OCR (14 types, version control, verify/reject, masking, duplicate detection)
-- **Module 8** — Delivery Management (checklist, accessories, OTP, printable challan, WhatsApp log-only pipeline)
-- **Module 9** — Payment & Finance System
-  - `payment_type` (Booking/Margin/Final/Other) on every payment
-  - Auto-computed `payment_status` (Pending/Partial/Completed) on booking
-  - `net_payable` = final_deal_price − exchange.final_value
-  - `/bookings/{id}/payment-summary` with by-type breakdown + margin-alert when delivery ≤ 3 days away with no Margin payment
-  - `/payments/{id}/receipt` — printable HTML receipt
-  - Finance Cases (unique per lead) with status flow Not Applied → Applied → Under Review → Approved/Rejected
-  - Auto-compute `loan_amount` = final_price − downpayment
-  - Approve/Reject restricted to admin/super_admin; reject requires reason
-  - Downpayment-received toggle
-  - Delivery /complete now allows finance path: **pending>0 OK if finance Approved + downpayment received**
-- **Module 10** — Exchange Vehicle System
-  - Extended ExchangeInfo (old_model, self_start, finance_on_rc, expected/offered/final/broker values, notes)
-  - `/leads/{id}/exchange-valuations` — broker/internal/online valuation history
-  - `/leads/{id}/exchange-photos` — multi-photo upload to Emergent Object Storage
-  - Auto-adjusts booking payable on exchange.final_value change
-  - Visible in UI only when `purchase_type='Exchange Vehicle'`
-
-### Frontend
-- Login + Dashboard + Leads list + Lead form
-- Lead detail page tabs: Overview / Follow-ups / Deal / **Booking** (with payment_type selector, receipt print button, payment-breakdown card, finance-case card with status stepper + approve/reject + downpayment toggle, margin alert) / **Exchange** (conditional tab with inspection form, pricing, valuation history, photos) / Delivery / Documents / Timeline
-- Funnel kanban, Tasks page, User management, Master Data management
+### 2026-04-21 — Modules 11 & 12 (24/24 backend tests + frontend E2E)
+- **Module 11 — WhatsApp Communication Automation**
+  - `wa_templates` CRUD (admin/super_admin write, 14 categories, variable placeholders via Jinja-like render)
+  - `automation_rules` CRUD with event trigger (`inquiry_created`, `stage_changed`, `feedback_reminder`, `rc_reminder`, `lost_reengage`, etc.), JSON conditions matcher, delay support, active toggle
+  - `fire_event` auto-queues messages on matching rules
+  - `/leads/{id}/wa-messages` chat history + manual send (template OR content)
+  - `/leads/{id}/wa-inbound` to log customer replies with reply_tag
+  - `/wa-messages/{id}/retry` (WA_MAX_RETRIES=3)
+  - `/wa-messages/{id}/mark` status transitions (SENT→DELIVERED→READ / FAILED)
+  - `/leads/{id}/wa-optout` POST/DELETE/GET (opt-out blocks sending with 403)
+  - **Safety:** duplicate guard (identical content to same lead within 60s → 429), rate limit (>10 outbound/lead/minute → 429)
+  - Outbound send MOCKED: auto-marked SENT immediately (ready for Twilio/WATI worker swap)
+- **Module 12 — Marketing Campaigns**
+  - `campaigns` CRUD with targeting (stages, priorities, sources, branches, purchase_types, audience leads/past_buyers/all)
+  - Draft → Scheduled → Running → Completed status lifecycle
+  - `/campaigns/{id}/preview` returns audience_count + sample leads
+  - `/campaigns/{id}/send` bulk queues with per-campaign dedupe, flips status, honours opt-outs
+  - `/campaigns/{id}/stats` counters for queued/sent/delivered/read/failed/responses/conversions
+  - Admin sees own + branch-scoped + global (super_admin) campaigns
+- **Frontend**
+  - New routes `/campaigns` and `/automation` (admin/super_admin only)
+  - Sidebar links Campaigns & Automation under Admin section
+  - LeadDetail new **WhatsApp** tab with chat UI (outbound right green / inbound left), template picker, opt-out toggle, inbound-simulation input with reply_tag selector
+  - Automation page — Templates + Rules tabs, full CRUD dialogs with a11y DialogDescription
+  - Campaigns page — list + stats dialog + preview dialog + rich audience-filter dialog
 
 ## Seeded Credentials
 - Super Admin: `superadmin@dealer.com` / `super123`
@@ -73,18 +67,20 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 ## Prioritized Backlog
 ### P1 — High value next phase
 - Drag-and-drop on Funnel kanban for stage change
-- Advanced analytics dashboard: executive performance, branch comparison, conversion funnel chart, monthly trends
-- WhatsApp / SMS notification on follow-up reminders
+- Advanced analytics dashboard (executive perf, branch compare, conversion funnel chart, monthly trends)
+- Real WhatsApp gateway swap (Twilio/WATI worker replacing auto-SENT mock in `_queue_message`)
 - Lead export to CSV
+- Split `server.py` (3.6k LOC) into `routers/whatsapp.py`, `routers/campaigns.py`, `routers/automation.py` + models/
 
 ### P2 — Nice to have
+- Campaign background worker (BackgroundTasks → 202 + poll via /stats) for 50k+ lead campaigns
+- `_conditions_match` operator support (in, not-in, range, nested paths)
+- Env-driven `WA_RATE_LIMIT_PER_MIN` and `WA_DUP_WINDOW_SEC`
 - Soft-delete for leads + trash view
-- Enforce stage progression order (currently only prerequisites enforced)
-- Cascading master-data deletes
+- Enforce strict stage-progression order
 - Brute-force protection on /login (lockout after 5 fails)
-- /api/auth/refresh endpoint for refresh-token flow
 - Email notifications (welcome, password reset)
-- Audit log viewer (admin-wide, not per-lead)
+- Audit log viewer (admin-wide)
 
 ### P3 — Polish
 - Customer self-service portal
@@ -93,5 +89,6 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 - Commission tracking for sales execs
 
 ## Next Task List
-1. Gather user feedback on initial build
-2. If approved, start P1 items with priority
+1. Collect user feedback on Modules 11 & 12 UX
+2. Swap WhatsApp MOCK with Twilio/WATI when API keys ready
+3. Start P1 items in priority order

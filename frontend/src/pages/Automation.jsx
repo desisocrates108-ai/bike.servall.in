@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, Zap } from "lucide-react";
@@ -183,7 +183,10 @@ export default function Automation() {
       {/* Template dialog */}
       <Dialog open={tplOpen} onOpenChange={(v) => { setTplOpen(v); if (!v) setTplEdit(null); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{tplEdit ? "Edit" : "New"} template</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{tplEdit ? "Edit" : "New"} template</DialogTitle>
+            <DialogDescription>Message template with variable placeholders like &#123;&#123;customer_name&#125;&#125;.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={saveTemplate} className="space-y-3">
             <div>
               <Label className="overline">Name</Label>
@@ -223,7 +226,10 @@ export default function Automation() {
       {/* Rule dialog */}
       <Dialog open={ruleOpen} onOpenChange={(v) => { setRuleOpen(v); if (!v) setRuleEdit(null); }}>
         <DialogContent className="max-w-xl">
-          <DialogHeader><DialogTitle>{ruleEdit ? "Edit" : "New"} rule</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{ruleEdit ? "Edit" : "New"} rule</DialogTitle>
+            <DialogDescription>Trigger an automatic WhatsApp message on a lead event.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={saveRule} className="space-y-3">
             <div>
               <Label className="overline">Name</Label>

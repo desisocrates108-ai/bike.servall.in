@@ -2701,6 +2701,15 @@ async def send_manual(lid: str, body: ManualMessageIn, user: dict = Depends(get_
         raise HTTPException(400, "Provide template_id or content")
     if body.message_type not in WA_MESSAGE_TYPES:
         raise HTTPException(400, "Invalid message_type")
+    # Pre-checks to disambiguate failure modes before _queue_message returns None
+    if await _is_opted_out(lead["id"], lead.get("phone")):
+        raise HTTPException(403, "Lead has opted out of WhatsApp communication")
+    if body.template_id:
+        tpl_exists = await db.wa_templates.find_one(
+            {"id": body.template_id, "active": True}, {"_id": 0, "id": 1}
+        )
+        if not tpl_exists:
+            raise HTTPException(400, "Invalid or inactive template_id")
     doc = await _queue_message(
         lead,
         template_id=body.template_id,
@@ -2712,7 +2721,7 @@ async def send_manual(lid: str, body: ManualMessageIn, user: dict = Depends(get_
         user=user,
     )
     if not doc:
-        raise HTTPException(400, "Message not sent (opted out or invalid template)")
+        raise HTTPException(400, "Message not sent")
     return doc
 
 
@@ -2863,7 +2872,13 @@ async def _campaign_audience_query(camp: dict, user: dict) -> Dict[str, Any]:
 async def list_campaigns(user: dict = Depends(get_current_user)):
     q: Dict[str, Any] = {}
     if user["role"] == "admin":
-        q["$or"] = [{"created_by": user["id"]}, {"branch_scope": user.get("branch_id")}]
+        # Admin sees: campaigns they created, campaigns scoped to their branch,
+        # and global (branch_scope=None) campaigns created by super_admin
+        q["$or"] = [
+            {"created_by": user["id"]},
+            {"branch_scope": user.get("branch_id")},
+            {"branch_scope": None},
+        ]
     elif user["role"] == "sales_executive":
         raise HTTPException(403, "Access denied")
     items = await db.campaigns.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
