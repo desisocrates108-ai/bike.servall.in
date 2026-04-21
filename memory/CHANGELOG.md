@@ -1,52 +1,42 @@
 # CHANGELOG — Servall CRM
 
-## 2026-04-21 — Iteration 9: Drill-down Dashboards + Badge Removal
-**Scope**: Complete drill-down system + remove Emergent badge + new detail pages + charts + filter chips.
+## 2026-04-21 — Iteration 10: Role Hardening + Global Search + Contacts + Reminder
+**Scope**: Branch-admin access restrictions, CEO global search + branch filters, sales-exec contacts + reminder, remove Help button.
 
 ### Removed
-- `Made with Emergent` badge removed from `public/index.html` (the `<a id="emergent-badge">` element deleted). Verified — badge HTML/text is 100% absent from served HTML.
-- Legacy branch-performance and user-performance dialogs removed from `Branches.jsx` and `Users.jsx` (replaced by dedicated detail pages).
+- **Floating Help (?) guide button** completely. `GuideButton` no longer imported in `Layout.jsx`. File kept for future re-enable but not rendered.
+- **Branch Admin** access to Users, Branches, Audit Logs:
+  - UI: sidebar nav items only render when `isSuper === true`
+  - Routes: `/users`, `/branches`, `/audit-logs` now `roles={["super_admin"]}` only
+  - Backend: POST/PUT `/api/users` → `super_admin` only; GET `/api/audit-logs` → `super_admin` only; GET `/api/users` kept for admin (needed for dropdowns)
 
 ### Added
-- **BranchDetail.jsx** (`/branches/:id`): PageHeader with back, clickable KPIs, funnel chart (click stage → /leads?branch_id=X&stage=Y), team list (click exec → /users/:id), loss-reason donut, sources bar chart, recent leads
-- **UserDetail.jsx** (`/users/:id`): PageHeader, KPIs, funnel chart, loss-reason donut, activity timeline (last 15 follow-ups), recent leads
-- **Charts.jsx**: Reusable `FunnelChart`, `BarChart`, `DonutBreakdown` (zero-dep SVG-less)
-- **Filter chip UI** on `/leads`: `active-filter-chips` region with `chip-<key>` x-to-clear + `clear-all-chips`; `useSearchParams` keeps URL in sync so deep links and back-nav work
-- Dashboard drill-downs:
-  - All stat cards have `linkTo` → filtered `/leads`
-  - Funnel blocks clickable → `/leads?stage=<S>`
-  - Branch comparison rows clickable → `/branches/:id` + new `SimpleBarChart` above the table
-  - Team perf rows clickable → `/users/:id`
-  - Loss card wrapped in `<Link>` → `/leads?stage=Lost`
-- **Funnel.jsx** rewritten with PageHeader + clickable column headers (`funnel-col-link-<Stage>` → filtered /leads)
+- **GlobalSearch** (`components/GlobalSearch.jsx`): top-bar search with debounced dropdown of matching leads (name/phone). Desktop inline; mobile collapsible full-screen sheet. Backend-scoped via `/api/leads?search=` so CEO sees all, admin sees own branch, sales sees own leads. Dropdown rendered at `z-50` inside a `z-30` top bar so it beats PageHeader (`z-20`).
+- **Contacts page** (`/contacts`): de-duplicated customer list (by phone) with Call (`tel:`) and WhatsApp (`https://wa.me/91<num>`) one-tap buttons. `data-testid=contact-card-<id>, contact-call-<id>, contact-wa-<id>`.
+- **Branch filter** on Dashboard (super_admin only — `dash-branch-filter`) and Funnel (`funnel-branch-filter`). Backend `/api/analytics/summary` and `/api/analytics/performance` now accept optional `branch_id` query honored only for super_admin.
+- **Set Reminder** button + dialog on LeadDetail: `set-reminder-btn` opens dialog with `reminder-date`, `reminder-time`, `reminder-type`, `save-reminder-btn`. Saves `next_followup_date/time/type` on the lead via `PUT /api/leads/{id}` → appears in Tasks page automatically. Missed reminders already highlighted in Tasks "Missed" tab.
+- **Role-aware bottom nav**:
+  - `sales_executive`: Home / Leads / Tasks / **Contacts**
+  - `admin` + `super_admin`: Home / Leads / Tasks / **WhatsApp**
 
-### Updated
-- `Leads.jsx` — reads & writes `useSearchParams`, active chip strip, "filtered" subtitle, back button appears when filtered
-- `Branches.jsx` — PageHeader, mobile `branch-card-<id>`, row click → /branches/:id
-- `Users.jsx` — PageHeader, mobile `user-card-<id>`, row click → /users/:id
-- `Automation.jsx`, `Campaigns.jsx`, `AuditLogs.jsx`, `Masters.jsx`, `LeadForm.jsx` — all have PageHeader with back button + mobile padding
-- i18n `tasks.*`, `branches.sub` keys added to EN + GU
-
-### Restored
-- Bottom nav z-index reverted to `z-40` (badge removal fixed the overlap root cause)
+### Changed
+- `LeadUpdate` Pydantic model now accepts `next_followup_time` field.
+- i18n: `nav.contacts`, `search.*`, `contacts.*`, `dash.all_branches` in EN + GU.
 
 ### Testing
-- Iteration 9 report: `/app/test_reports/iteration_9.json`
-- Backend: 14/14 pytest pass (`/app/backend/tests/test_iter9_drilldown.py`)
-- Frontend: 28/28 Playwright drill-down flows pass
-- RBAC verified: super_admin all; admin branch-only (cross-branch filter bypass silently scoped to own branch — zero leakage); sales_executive own-leads-only
-- PWA: `/manifest.json` + `/service-worker.js` both 200
+- Iteration 10 report: `/app/test_reports/iteration_10.json`
+- Backend: **13/13** pytest pass (`/app/backend/tests/test_iter10_rbac.py`)
+- Frontend: Playwright flows pass after z-index fix on GlobalSearch dropdown (`z-30` on desktop top bar)
+- RBAC verified: admin gets 403 on POST/PUT `/users`, GET `/audit-logs`; still 200 on GET `/users`; super_admin full access
 
 ### Known minor (non-blocking)
-- Cross-branch `?branch_id=X` for admin returns own-branch data silently (safe, no leakage) — explicit 403 would be sugar
-- Mobile 390px: some KPI labels still truncate on first render (cosmetic)
-- Radix `DialogTitle` a11y warning on Change-Stage dialog (carry-over)
+- Admin cross-branch filter silently scoped to own branch (carry-over). Explicit 403 remains optional hardening.
+- `POST /api/users` without `phone` surfaced a 500 in one test run — phone index is `sparse=True` and should allow null; could be a race with a prior duplicate-null attempt before the index migration. Make `phone` required at the API layer if desired.
 
 ---
 
+## 2026-04-21 — Iteration 9: Drill-down Dashboards + Badge Removal
 ## 2026-04-21 — Iteration 8: Mobile-First Overhaul
-See previous entries.
-
-## 2026-04-20 — Modules 13-14 + Gujarati + Rebrand
+## 2026-04-20 — Modules 13-14
 ## 2026-04-19 — Modules 11-12
 ## Earlier — Modules 1-10

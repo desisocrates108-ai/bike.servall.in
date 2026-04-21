@@ -186,7 +186,7 @@ export default function Layout({ children }) {
         </div>
 
         {/* DESKTOP TOP BAR (search + lang) */}
-        <div className="hidden md:flex sticky top-0 z-20 items-center gap-3 px-6 py-3 bg-zinc-100/90 backdrop-blur border-b border-zinc-200/50">
+        <div className="hidden md:flex sticky top-0 z-30 items-center gap-3 px-6 py-3 bg-zinc-100/90 backdrop-blur border-b border-zinc-200/50">
           <div className="flex-1 max-w-md">
             <GlobalSearch />
           </div>
