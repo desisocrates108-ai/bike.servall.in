@@ -69,6 +69,20 @@ DEAL_STATUSES = ["Draft", "Negotiation", "Approval Pending",
 BOOKING_STATUSES = ["Pending", "Confirmed", "Cancelled"]
 ALLOTMENT_STATUSES = ["Pending", "Allotted"]
 LOAN_STATUSES = ["Pending", "Approved", "Rejected"]
+DOC_TYPES = ["Aadhaar Card", "PAN Card", "RC Book", "Bank Statement",
+             "Finance Document", "Insurance Copy", "Invoice",
+             "RTO Form 20", "RTO Form 21", "RTO Form 22",
+             "Sale Challan", "Address Proof", "Photo", "Other"]
+DOC_STATUSES = ["Pending", "Verified", "Rejected"]
+DELIVERY_STATUSES = ["Scheduled", "Ready", "Delivered", "Cancelled"]
+DEFAULT_ACCESSORIES = ["Helmet", "Ceramic Coating", "Mud Flaps",
+                       "Side Guard", "Mobile Holder", "Other"]
+DOC_REQUIREMENTS = {
+    "Booking": ["Aadhaar Card"],
+    "Finance": ["Aadhaar Card", "PAN Card", "Bank Statement"],
+    "Registration": ["Aadhaar Card", "PAN Card", "RTO Form 20", "RTO Form 21"],
+    "Delivery": ["Aadhaar Card", "Invoice"],
+}
 ROLES = ["super_admin", "admin", "sales_executive"]
 
 # Configurable knobs
@@ -359,6 +373,64 @@ class AllotmentIn(BaseModel):
 class AllotmentUpdate(BaseModel):
     chassis_number: Optional[str] = None
     engine_number: Optional[str] = None
+    status: Optional[str] = None
+
+
+# ---- Module 7: Documents ----
+
+class ExtractedData(BaseModel):
+    document_number: Optional[str] = None
+    name: Optional[str] = None
+    address: Optional[str] = None
+    chassis_number: Optional[str] = None
+    engine_number: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    variant: Optional[str] = None
+    confidence_score: Optional[float] = None
+
+
+class DocumentUpdate(BaseModel):
+    doc_type: Optional[str] = None
+    doc_number: Optional[str] = None
+    extracted: Optional[ExtractedData] = None
+    notes: Optional[str] = None
+
+
+class DocumentReject(BaseModel):
+    reason: str
+
+
+# ---- Module 8: Delivery ----
+
+class AccessoryItem(BaseModel):
+    name: str
+    quantity: int = 1
+    value: float = 0.0
+
+
+class DeliveryChecklist(BaseModel):
+    payment_completed: bool = False
+    documents_verified: bool = False
+    vehicle_ready: bool = False
+    accessories_ready: bool = False
+
+
+class DeliveryIn(BaseModel):
+    delivery_date: str  # YYYY-MM-DD
+    time_slot: Optional[str] = None  # "10:00-12:00"
+    delivered_by: Optional[str] = None
+    instant_bypass: Optional[bool] = False
+    bypass_reason: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class DeliveryUpdate(BaseModel):
+    delivery_date: Optional[str] = None
+    time_slot: Optional[str] = None
+    delivered_by: Optional[str] = None
+    checklist: Optional[DeliveryChecklist] = None
+    accessories: Optional[List[AccessoryItem]] = None
+    notes: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -882,9 +954,11 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
         if deal.get("approval_required") and deal.get("approval_status") != "Approved":
             raise HTTPException(400, "Deal requires manager approval before Booking")
     if body.stage == "Registration":
-        docs = lead.get("documents") or []
-        if len(docs) == 0:
-            raise HTTPException(400, "Upload at least one document before Registration")
+        # Module 7 enforcement: all required Registration docs must be Verified
+        lead_docs = await db.documents.find({"lead_id": lid, "is_latest": True}, {"_id": 0}).to_list(200)
+        missing = _stage_doc_requirements("Registration", lead_docs)
+        if missing:
+            raise HTTPException(400, f"Missing verified documents for Registration: {', '.join(missing)}")
     if body.stage == "Lost":
         if not body.lost_reason:
             raise HTTPException(400, "Lost reason is required")
@@ -1078,8 +1152,8 @@ async def get_timeline(lid: str, user: dict = Depends(get_current_user)):
 # Files
 # ============================================================
 
-@api.post("/leads/{lid}/documents")
-async def upload_document(
+@api.post("/leads/{lid}/documents-quick")
+async def upload_document_quick(
     lid: str,
     file: UploadFile = File(...),
     doc_type: str = Form("other"),
@@ -1604,6 +1678,604 @@ async def update_allotment(aid: str, body: AllotmentUpdate,
 # ============================================================
 
 
+# ============================================================
+# Module 7 — Documents (with Gemini OCR)
+# ============================================================
+
+def _mask_doc_number(doc_type: Optional[str], n: Optional[str]) -> Optional[str]:
+    if not n:
+        return n
+    s = str(n).replace(" ", "")
+    if doc_type == "Aadhaar Card" and len(s) >= 4:
+        return "XXXX XXXX " + s[-4:]
+    if doc_type == "PAN Card" and len(s) >= 4:
+        return s[:2] + "XXXX" + s[-2:]
+    return n
+
+
+def _present_document(d: dict, mask: bool = True) -> dict:
+    out = dict(d)
+    out.pop("_id", None)
+    if mask and out.get("doc_number"):
+        out["doc_number_masked"] = _mask_doc_number(out.get("doc_type"), out["doc_number"])
+        if out.get("doc_type") in ("Aadhaar Card", "PAN Card"):
+            out["doc_number"] = out["doc_number_masked"]
+    return out
+
+
+async def _upload_doc_file(lid: str, doc_type: str, upload: UploadFile, user: dict, side: str) -> Optional[dict]:
+    if not upload:
+        return None
+    ext = (upload.filename or "bin").split(".")[-1].lower() if "." in (upload.filename or "") else "bin"
+    path = f"{APP_NAME}/leads/{lid}/documents/{uuid.uuid4()}.{ext}"
+    data = await upload.read()
+    result = put_object(path, data, upload.content_type or "application/octet-stream")
+    file_id = str(uuid.uuid4())
+    frec = {
+        "id": file_id, "lead_id": lid,
+        "storage_path": result["path"],
+        "original_filename": upload.filename,
+        "content_type": upload.content_type,
+        "size": result.get("size"),
+        "doc_type": doc_type, "side": side,
+        "uploaded_by": user["id"], "uploaded_by_name": user["name"],
+        "is_deleted": False, "created_at": now_iso(),
+    }
+    await db.files.insert_one(frec)
+    frec.pop("_id", None)
+    return frec
+
+
+@api.post("/leads/{lid}/documents")
+async def upload_document(
+    lid: str,
+    doc_type: str = Form(...),
+    doc_number: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    front: UploadFile = File(...),
+    back: Optional[UploadFile] = File(None),
+    user: dict = Depends(get_current_user),
+):
+    if doc_type not in DOC_TYPES:
+        raise HTTPException(400, "Invalid doc_type")
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+
+    # Supersede existing latest of same doc_type
+    await db.documents.update_many(
+        {"lead_id": lid, "doc_type": doc_type, "is_latest": True},
+        {"$set": {"is_latest": False}},
+    )
+    prev = await db.documents.count_documents({"lead_id": lid, "doc_type": doc_type})
+
+    front_file = await _upload_doc_file(lid, doc_type, front, user, "front")
+    back_file = await _upload_doc_file(lid, doc_type, back, user, "back") if back else None
+
+    did = str(uuid.uuid4())
+    doc = {
+        "id": did, "lead_id": lid,
+        "branch_id": lead.get("branch_id"),
+        "customer_name": lead.get("customer_name"),
+        "doc_type": doc_type,
+        "doc_number": (doc_number or "").strip() or None,
+        "front_file_id": front_file["id"] if front_file else None,
+        "back_file_id": back_file["id"] if back_file else None,
+        "extracted": {}, "ocr_ran": False, "ocr_at": None,
+        "status": "Pending",
+        "version": prev + 1, "is_latest": True,
+        "verified_by": None, "verified_by_name": None, "verified_at": None,
+        "rejection_reason": None,
+        "notes": notes,
+        "uploaded_by": user["id"], "uploaded_by_name": user["name"],
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.documents.insert_one(doc)
+    doc.pop("_id", None)
+    await add_timeline(lid, "Document Uploaded", user,
+                       {"doc_type": doc_type, "version": doc["version"]})
+    return _present_document(doc)
+
+
+@api.get("/leads/{lid}/documents")
+async def list_documents(lid: str, include_history: bool = False,
+                         user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    q: Dict[str, Any] = {"lead_id": lid}
+    if not include_history:
+        q["is_latest"] = True
+    items = await db.documents.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [_present_document(d) for d in items]
+
+
+@api.put("/documents/{did}")
+async def update_document(did: str, body: DocumentUpdate, user: dict = Depends(get_current_user)):
+    doc = await db.documents.find_one({"id": did}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    lead = await db.leads.find_one({"id": doc["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    updates: Dict[str, Any] = {}
+    if body.doc_type and body.doc_type in DOC_TYPES:
+        updates["doc_type"] = body.doc_type
+    if body.doc_number is not None:
+        updates["doc_number"] = body.doc_number.strip() or None
+    if body.extracted is not None:
+        updates["extracted"] = body.extracted.model_dump(exclude_none=False)
+    if body.notes is not None:
+        updates["notes"] = body.notes
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.documents.update_one({"id": did}, {"$set": updates})
+    fresh = await db.documents.find_one({"id": did}, {"_id": 0})
+    return _present_document(fresh)
+
+
+@api.post("/documents/{did}/verify")
+async def verify_document(did: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    doc = await db.documents.find_one({"id": did}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    lead = await db.leads.find_one({"id": doc["lead_id"]}, {"_id": 0})
+    if user["role"] == "admin" and (not lead or lead.get("branch_id") != user.get("branch_id")):
+        raise HTTPException(403, "Out of branch")
+    await db.documents.update_one({"id": did}, {"$set": {
+        "status": "Verified",
+        "verified_by": user["id"], "verified_by_name": user["name"],
+        "verified_at": now_iso(), "rejection_reason": None,
+        "updated_at": now_iso(),
+    }})
+    await add_timeline(doc["lead_id"], "Document Verified", user, {"doc_type": doc["doc_type"]})
+    fresh = await db.documents.find_one({"id": did}, {"_id": 0})
+    return _present_document(fresh)
+
+
+@api.post("/documents/{did}/reject")
+async def reject_document(did: str, body: DocumentReject,
+                          user: dict = Depends(require_roles("super_admin", "admin"))):
+    doc = await db.documents.find_one({"id": did}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    lead = await db.leads.find_one({"id": doc["lead_id"]}, {"_id": 0})
+    if user["role"] == "admin" and (not lead or lead.get("branch_id") != user.get("branch_id")):
+        raise HTTPException(403, "Out of branch")
+    await db.documents.update_one({"id": did}, {"$set": {
+        "status": "Rejected",
+        "rejection_reason": body.reason,
+        "verified_by": user["id"], "verified_by_name": user["name"],
+        "verified_at": now_iso(),
+        "updated_at": now_iso(),
+    }})
+    await add_timeline(doc["lead_id"], "Document Rejected", user,
+                       {"doc_type": doc["doc_type"], "reason": body.reason})
+    fresh = await db.documents.find_one({"id": did}, {"_id": 0})
+    return _present_document(fresh)
+
+
+@api.get("/documents/{did}/duplicates")
+async def duplicate_documents(did: str, user: dict = Depends(get_current_user)):
+    doc = await db.documents.find_one({"id": did}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    lead = await db.leads.find_one({"id": doc["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    number = doc.get("doc_number")
+    if not number:
+        return []
+    dups = await db.documents.find({
+        "doc_type": doc["doc_type"],
+        "doc_number": number,
+        "lead_id": {"$ne": doc["lead_id"]},
+    }, {"_id": 0}).to_list(50)
+    return [_present_document(d) for d in dups]
+
+
+@api.post("/documents/{did}/ocr")
+async def run_ocr(did: str, user: dict = Depends(get_current_user)):
+    doc = await db.documents.find_one({"id": did}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    lead = await db.leads.find_one({"id": doc["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    front = await db.files.find_one({"id": doc.get("front_file_id")}, {"_id": 0}) if doc.get("front_file_id") else None
+    if not front:
+        raise HTTPException(400, "No front image to OCR")
+
+    try:
+        import base64 as _b64
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+
+        front_bytes, front_ctype = get_object(front["storage_path"])
+        b64_front = _b64.b64encode(front_bytes).decode()
+        images = [ImageContent(image_base64=b64_front)]
+        if doc.get("back_file_id"):
+            back = await db.files.find_one({"id": doc["back_file_id"]}, {"_id": 0})
+            if back:
+                back_bytes, _ = get_object(back["storage_path"])
+                images.append(ImageContent(image_base64=_b64.b64encode(back_bytes).decode()))
+
+        prompt = (
+            f"You are an OCR assistant for an Indian two-wheeler dealership. "
+            f"Extract fields from this {doc['doc_type']} image(s). "
+            "Respond with ONLY a strict JSON object (no markdown, no commentary) with keys: "
+            '"document_number", "name", "address", "chassis_number", "engine_number", '
+            '"vehicle_model", "variant", "confidence_score" (0.0 to 1.0). '
+            "Use empty string for missing fields."
+        )
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"ocr-{did}",
+            system_message="You extract structured fields from document images and return strict JSON only.",
+        ).with_model("gemini", "gemini-2.5-flash")
+        msg = UserMessage(text=prompt, file_contents=images)
+        raw = await chat.send_message(msg)
+        raw = (raw or "").strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("json"):
+                raw = raw[4:].lstrip()
+        import json as _json
+        try:
+            data = _json.loads(raw)
+        except Exception:
+            # Try to locate a JSON object
+            start = raw.find("{")
+            end = raw.rfind("}")
+            data = _json.loads(raw[start:end + 1]) if start >= 0 and end > start else {}
+
+        extracted = {
+            "document_number": (data.get("document_number") or "").strip() or None,
+            "name": (data.get("name") or "").strip() or None,
+            "address": (data.get("address") or "").strip() or None,
+            "chassis_number": (data.get("chassis_number") or "").strip().upper() or None,
+            "engine_number": (data.get("engine_number") or "").strip().upper() or None,
+            "vehicle_model": (data.get("vehicle_model") or "").strip() or None,
+            "variant": (data.get("variant") or "").strip() or None,
+            "confidence_score": float(data.get("confidence_score") or 0.0),
+        }
+        await db.documents.update_one({"id": did}, {"$set": {
+            "extracted": extracted,
+            "ocr_ran": True,
+            "ocr_at": now_iso(),
+            "updated_at": now_iso(),
+        }})
+        if not doc.get("doc_number") and extracted.get("document_number"):
+            await db.documents.update_one({"id": did},
+                                          {"$set": {"doc_number": extracted["document_number"]}})
+        fresh = await db.documents.find_one({"id": did}, {"_id": 0})
+        return _present_document(fresh)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("OCR failed")
+        raise HTTPException(500, f"OCR failed: {e}")
+
+
+def _stage_doc_requirements(stage: str, lead_docs: List[dict]) -> List[str]:
+    required = DOC_REQUIREMENTS.get(stage, [])
+    verified_types = {d["doc_type"] for d in lead_docs
+                      if d.get("is_latest") and d.get("status") == "Verified"}
+    missing = [t for t in required if t not in verified_types]
+    return missing
+
+
+# ============================================================
+# Module 8 — Delivery
+# ============================================================
+
+async def _log_whatsapp(lead: dict, intent: str, payload: dict, user: Optional[dict] = None):
+    await db.whatsapp_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "lead_id": lead["id"],
+        "phone": lead.get("phone"),
+        "intent": intent,
+        "payload": payload,
+        "status": "LOGGED",  # would become "SENT" after Twilio/Wati hookup
+        "actor_id": (user or {}).get("id"),
+        "created_at": now_iso(),
+    })
+
+
+@api.get("/leads/{lid}/whatsapp-logs")
+async def list_whatsapp_logs(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    items = await db.whatsapp_logs.find({"lead_id": lid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+
+@api.post("/leads/{lid}/delivery")
+async def create_delivery(lid: str, body: DeliveryIn, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    existing = await db.deliveries.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}},
+                                            {"_id": 0})
+    if existing:
+        raise HTTPException(400, "Delivery already scheduled")
+
+    booking = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}},
+                                         {"_id": 0})
+    allotment = await db.allotments.find_one({"booking_id": booking["id"]}, {"_id": 0}) if booking else None
+
+    # Instant-delivery bypass requires admin/super_admin + reason
+    if body.instant_bypass:
+        if user["role"] not in ("super_admin", "admin"):
+            raise HTTPException(403, "Instant delivery bypass requires admin approval")
+        if not body.bypass_reason:
+            raise HTTPException(400, "Bypass reason required")
+    else:
+        if not booking or booking["status"] != "Confirmed":
+            raise HTTPException(400, "Booking must be Confirmed before delivery")
+        if not allotment:
+            raise HTTPException(400, "Vehicle must be allotted before delivery")
+
+    did = str(uuid.uuid4())
+    doc = {
+        "id": did, "lead_id": lid,
+        "booking_id": booking["id"] if booking else None,
+        "allotment_id": allotment["id"] if allotment else None,
+        "branch_id": lead.get("branch_id"),
+        "delivery_date": body.delivery_date,
+        "time_slot": body.time_slot,
+        "delivered_by": body.delivered_by or user["id"],
+        "status": "Scheduled",
+        "checklist": {"payment_completed": False, "documents_verified": False,
+                      "vehicle_ready": False, "accessories_ready": False},
+        "accessories": [],
+        "otp_hash": None, "otp_expires": None, "otp_verified": False, "otp_verified_at": None,
+        "instant_bypass": bool(body.instant_bypass),
+        "bypass_reason": body.bypass_reason,
+        "bypass_approved_by": user["id"] if body.instant_bypass else None,
+        "notes": body.notes,
+        "customer_name": lead.get("customer_name"),
+        "customer_phone": lead.get("phone"),
+        "chassis_number": (allotment or {}).get("chassis_number"),
+        "engine_number": (allotment or {}).get("engine_number"),
+        "created_by": user["id"], "created_by_name": user["name"],
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.deliveries.insert_one(doc)
+    doc.pop("_id", None)
+    await add_timeline(lid, "Delivery Scheduled", user,
+                       {"delivery_date": body.delivery_date, "instant_bypass": bool(body.instant_bypass)})
+    await _log_whatsapp(lead, "delivery_scheduled",
+                        {"delivery_date": body.delivery_date, "time_slot": body.time_slot}, user)
+    return doc
+
+
+@api.get("/leads/{lid}/delivery")
+async def get_delivery_for_lead(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    return await db.deliveries.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}},
+                                        {"_id": 0})
+
+
+@api.put("/deliveries/{did}")
+async def update_delivery(did: str, body: DeliveryUpdate, user: dict = Depends(get_current_user)):
+    delivery = await db.deliveries.find_one({"id": did}, {"_id": 0})
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    lead = await db.leads.find_one({"id": delivery["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    updates = body.model_dump(exclude_unset=True)
+    if "status" in updates and updates["status"] not in DELIVERY_STATUSES:
+        raise HTTPException(400, "Invalid status")
+    if "accessories" in updates and updates["accessories"] is not None:
+        updates["accessories"] = [a for a in updates["accessories"]]
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.deliveries.update_one({"id": did}, {"$set": updates})
+    fresh = await db.deliveries.find_one({"id": did}, {"_id": 0})
+    return fresh
+
+
+@api.post("/deliveries/{did}/otp-generate")
+async def otp_generate(did: str, user: dict = Depends(get_current_user)):
+    delivery = await db.deliveries.find_one({"id": did}, {"_id": 0})
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    lead = await db.leads.find_one({"id": delivery["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    import secrets
+    otp = f"{secrets.randbelow(1000000):06d}"
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    await db.deliveries.update_one({"id": did}, {"$set": {
+        "otp_hash": hash_password(otp),
+        "otp_expires": expires,
+        "otp_verified": False,
+        "updated_at": now_iso(),
+    }})
+    await _log_whatsapp(lead, "delivery_otp", {"otp": otp, "expires_at": expires}, user)
+    # Returned to sales exec UI to read aloud / share with customer
+    return {"otp": otp, "expires_at": expires}
+
+
+@api.post("/deliveries/{did}/otp-verify")
+async def otp_verify(did: str, otp: str = Query(...), user: dict = Depends(get_current_user)):
+    delivery = await db.deliveries.find_one({"id": did}, {"_id": 0})
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    lead = await db.leads.find_one({"id": delivery["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if not delivery.get("otp_hash") or not delivery.get("otp_expires"):
+        raise HTTPException(400, "No OTP generated")
+    if datetime.fromisoformat(delivery["otp_expires"]) < datetime.now(timezone.utc):
+        raise HTTPException(400, "OTP expired")
+    if not verify_password(otp, delivery["otp_hash"]):
+        raise HTTPException(400, "Invalid OTP")
+    await db.deliveries.update_one({"id": did}, {"$set": {
+        "otp_verified": True,
+        "otp_verified_at": now_iso(),
+        "updated_at": now_iso(),
+    }})
+    return {"ok": True}
+
+
+@api.post("/deliveries/{did}/complete")
+async def complete_delivery(did: str, user: dict = Depends(get_current_user)):
+    delivery = await db.deliveries.find_one({"id": did}, {"_id": 0})
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    lead = await db.leads.find_one({"id": delivery["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+
+    # Payment completeness
+    booking = await db.bookings.find_one({"id": delivery.get("booking_id")}, {"_id": 0}) if delivery.get("booking_id") else None
+    if booking and float(booking.get("pending_amount") or 0) > 0:
+        raise HTTPException(400, f"Pending amount ₹{booking['pending_amount']} must be cleared before delivery")
+
+    checklist = delivery.get("checklist") or {}
+    if not all([checklist.get("payment_completed"), checklist.get("documents_verified"),
+                checklist.get("vehicle_ready"), checklist.get("accessories_ready")]):
+        raise HTTPException(400, "All checklist items must be completed")
+    if not delivery.get("otp_verified"):
+        raise HTTPException(400, "Customer OTP verification required")
+
+    # Documents: all mandatory-for-delivery types must be Verified
+    docs = await db.documents.find({"lead_id": lead["id"], "is_latest": True}, {"_id": 0}).to_list(200)
+    missing = _stage_doc_requirements("Delivery", docs)
+    if missing:
+        raise HTTPException(400, f"Missing verified documents: {', '.join(missing)}")
+
+    await db.deliveries.update_one({"id": did}, {"$set": {
+        "status": "Delivered",
+        "delivered_at": now_iso(),
+        "completed_by": user["id"],
+        "updated_at": now_iso(),
+    }})
+    # Advance lead stage
+    await db.leads.update_one({"id": lead["id"]},
+                              {"$set": {"stage": "Registration", "updated_at": now_iso()}})
+    await add_timeline(lead["id"], "Vehicle Delivered", user, {})
+    await add_timeline(lead["id"], "Stage Changed", user,
+                       {"from": "Delivery", "to": "Registration", "via": "delivery_complete"})
+    # WhatsApp post-delivery intents
+    await _log_whatsapp(lead, "delivery_thank_you",
+                        {"message": f"Thanks for buying with us, {lead.get('customer_name')}!"}, user)
+    await _log_whatsapp(lead, "feedback_reminder",
+                        {"send_after_days": 5, "message": "How was your experience?"}, user)
+    await _log_whatsapp(lead, "rc_followup",
+                        {"send_after_days": 45, "message": "Your RC should be ready. Please collect."}, user)
+    return await db.deliveries.find_one({"id": did}, {"_id": 0})
+
+
+@api.get("/deliveries/{did}/challan", response_class=FastResponse)
+async def delivery_challan(did: str, request: Request,
+                           authorization: Optional[str] = Header(None),
+                           auth: Optional[str] = Query(None)):
+    # Accept query-param token so print window works
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    elif auth:
+        token = auth
+    else:
+        token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except Exception:
+        raise HTTPException(401, "Invalid token")
+
+    delivery = await db.deliveries.find_one({"id": did}, {"_id": 0})
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    lead = await db.leads.find_one({"id": delivery["lead_id"]}, {"_id": 0})
+    booking = await db.bookings.find_one({"id": delivery.get("booking_id")}, {"_id": 0}) if delivery.get("booking_id") else None
+    branch = await db.branches.find_one({"id": delivery.get("branch_id")}, {"_id": 0})
+    payments = await db.payments.find({"booking_id": booking["id"] if booking else ""}, {"_id": 0}).sort("date", 1).to_list(200) if booking else []
+
+    accessories_rows = "".join(
+        f"<tr><td>{a.get('name','')}</td><td style='text-align:center'>{a.get('quantity',1)}</td><td style='text-align:right'>₹{a.get('value',0)}</td></tr>"
+        for a in (delivery.get("accessories") or [])
+    )
+    payment_rows = "".join(
+        f"<tr><td>{p['date']}</td><td>{p['mode']}</td><td style='text-align:right'>₹{p['amount']}</td></tr>"
+        for p in payments
+    )
+
+    html = f"""<!doctype html><html><head><meta charset="utf-8"><title>Delivery Challan</title>
+<style>
+  body {{ font-family: 'IBM Plex Sans', Arial, sans-serif; color: #09090b; padding: 40px; max-width: 800px; margin: auto; }}
+  h1 {{ font-size: 24px; margin: 0 0 4px; letter-spacing: -0.02em; }}
+  .overline {{ font-size: 10px; letter-spacing: 0.2em; color: #52525b; font-weight: 700; text-transform: uppercase; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }}
+  th, td {{ border: 1px solid #e4e4e7; padding: 8px; text-align: left; }}
+  th {{ background: #fafafa; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }}
+  .two {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }}
+  .box {{ border: 1px solid #e4e4e7; padding: 16px; }}
+  .muted {{ color: #52525b; font-size: 12px; }}
+  .total {{ font-weight: 700; font-size: 16px; }}
+  @media print {{ .noprint {{ display: none }} body {{ padding: 0 }} }}
+</style></head><body>
+  <div class="noprint" style="text-align:right;margin-bottom:16px">
+    <button onclick="window.print()">Print</button>
+  </div>
+  <div style="border-bottom:2px solid #09090b; padding-bottom: 12px; margin-bottom: 16px;">
+    <div class="overline">Torque Dealership CRM</div>
+    <h1>Delivery Challan</h1>
+    <div class="muted">Branch: {branch.get('name') if branch else '—'} · Date: {delivery.get('delivered_at','')[:10] or delivery.get('delivery_date','')}</div>
+  </div>
+  <div class="two">
+    <div class="box">
+      <div class="overline">Customer</div>
+      <div style="margin-top:4px"><b>{delivery.get('customer_name','')}</b></div>
+      <div class="muted">Phone: {delivery.get('customer_phone','')}</div>
+      <div class="muted">Address: {lead.get('address') if lead else '—'}</div>
+    </div>
+    <div class="box">
+      <div class="overline">Vehicle</div>
+      <div style="margin-top:4px"><b>Chassis: {delivery.get('chassis_number','—')}</b></div>
+      <div class="muted">Engine: {delivery.get('engine_number','—')}</div>
+    </div>
+  </div>
+  <h3 style="margin-top:16px">Payment Summary</h3>
+  <table>
+    <tr><th>Date</th><th>Mode</th><th style="text-align:right">Amount</th></tr>
+    {payment_rows or '<tr><td colspan="3" class="muted">No payments recorded</td></tr>'}
+    <tr><td colspan="2" class="total">Total Paid</td><td class="total" style="text-align:right">₹{(booking or {}).get('total_paid',0)}</td></tr>
+    <tr><td colspan="2" class="total">Final Deal Price</td><td class="total" style="text-align:right">₹{(booking or {}).get('final_deal_price',0)}</td></tr>
+    <tr><td colspan="2" class="total">Pending</td><td class="total" style="text-align:right">₹{(booking or {}).get('pending_amount',0)}</td></tr>
+  </table>
+  <h3 style="margin-top:16px">Accessories</h3>
+  <table>
+    <tr><th>Item</th><th>Qty</th><th style="text-align:right">Value</th></tr>
+    {accessories_rows or '<tr><td colspan="3" class="muted">No accessories</td></tr>'}
+  </table>
+  <div class="two" style="margin-top:48px">
+    <div><div class="muted">Delivered by</div><div style="margin-top:40px;border-top:1px solid #09090b;padding-top:6px;font-weight:700">{delivery.get('created_by_name','')}</div></div>
+    <div><div class="muted">Customer signature</div><div style="margin-top:40px;border-top:1px solid #09090b;padding-top:6px;font-weight:700">OTP Verified: {'✓' if delivery.get('otp_verified') else '—'}</div></div>
+  </div>
+</body></html>"""
+    return FastResponse(content=html, media_type="text/html")
+
+
+
+
 @api.get("/analytics/deals")
 async def analytics_deals(user: dict = Depends(get_current_user)):
     base: Dict[str, Any] = {}
@@ -1661,6 +2333,10 @@ async def seed_data():
     await db.payments.create_index("booking_id")
     await db.allotments.create_index("chassis_number", unique=True)
     await db.allotments.create_index("booking_id", unique=True)
+    await db.documents.create_index([("lead_id", 1), ("doc_type", 1)])
+    await db.documents.create_index([("doc_type", 1), ("doc_number", 1)])
+    await db.deliveries.create_index("lead_id")
+    await db.whatsapp_logs.create_index("lead_id")
 
     # Branches
     branch_defs = [
@@ -1869,6 +2545,11 @@ async def get_constants():
         "booking_statuses": BOOKING_STATUSES,
         "allotment_statuses": ALLOTMENT_STATUSES,
         "loan_statuses": LOAN_STATUSES,
+        "doc_types": DOC_TYPES,
+        "doc_statuses": DOC_STATUSES,
+        "doc_requirements": DOC_REQUIREMENTS,
+        "delivery_statuses": DELIVERY_STATUSES,
+        "default_accessories": DEFAULT_ACCESSORIES,
         "roles": ROLES,
         "config": {
             "discount_approval_threshold": DISCOUNT_APPROVAL_THRESHOLD,

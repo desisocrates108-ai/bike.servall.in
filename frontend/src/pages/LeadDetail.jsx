@@ -355,6 +355,7 @@ export default function LeadDetail() {
           <TabsTrigger value="followups" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-followups">Follow-ups ({followups.length})</TabsTrigger>
           <TabsTrigger value="deal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-deal">Deal</TabsTrigger>
           <TabsTrigger value="booking" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-booking">Booking</TabsTrigger>
+          <TabsTrigger value="delivery" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-delivery">Delivery</TabsTrigger>
           <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-documents">Documents ({(lead.documents || []).length})</TabsTrigger>
           <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-timeline">Timeline</TabsTrigger>
         </TabsList>
@@ -726,46 +727,12 @@ export default function LeadDetail() {
           <BookingSection lead={lead} constants={constants} onReload={reload} />
         </TabsContent>
 
+        <TabsContent value="delivery" className="pt-6">
+          <DeliverySection lead={lead} constants={constants} onReload={reload} />
+        </TabsContent>
 
         <TabsContent value="documents" className="pt-6">
-          <Card title="Upload document">
-            <div className="flex flex-wrap gap-3">
-              {["ID Proof", "Address Proof", "RC", "Finance Document", "Booking Receipt", "Vehicle Photo", "Other"].map((t) => (
-                <label
-                  key={t}
-                  className="inline-flex items-center gap-2 cursor-pointer border border-dashed border-zinc-300 rounded-sm px-3 py-2 text-sm hover:border-zinc-500"
-                  data-testid={`upload-${t.toLowerCase().replace(/[ /]/g, "-")}`}
-                >
-                  <Upload className="w-4 h-4" /> {t}
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0], t)}
-                  />
-                </label>
-              ))}
-            </div>
-          </Card>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(lead.documents || []).length === 0 && <div className="text-sm text-zinc-400">No documents uploaded.</div>}
-            {(lead.documents || []).map((d) => (
-              <a
-                key={d.id}
-                href={`${API}/files/${d.id}?auth=${encodeURIComponent(localStorage.getItem("access_token") || "")}`}
-                target="_blank"
-                rel="noreferrer"
-                className="bg-white border border-zinc-200 rounded-sm p-4 hover:border-zinc-400 transition-colors block"
-                data-testid={`doc-${d.id}`}
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-zinc-500" strokeWidth={1.5} />
-                  <div className="overline">{d.doc_type}</div>
-                </div>
-                <div className="text-sm mt-1 truncate">{d.filename}</div>
-              </a>
-            ))}
-          </div>
+          <DocumentsSection lead={lead} constants={constants} onReload={reload} />
         </TabsContent>
 
         <TabsContent value="timeline" className="pt-6">
