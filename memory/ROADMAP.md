@@ -1,33 +1,38 @@
 # ROADMAP — Servall CRM
 
-## P0 — Just Shipped (Iteration 8)
-- [x] Mobile-first UI (hamburger + bottom nav + cards)
-- [x] Global back buttons (PageHeader component)
-- [x] Strict form-gated funnel with Allotment stage
-- [x] Role-based dashboards (Sales/Admin/CEO)
-- [x] Interactive guide button (react-joyride)
-- [x] PWA (manifest + SW + icons)
-- [x] Branding + bilingual EN/GU
+## ✅ Shipped (Iterations 8-9)
+- Mobile-first UI (hamburger + bottom nav + cards + tap targets)
+- Global back buttons via `PageHeader`
+- Strict form-gated funnel (Allotment stage added)
+- Role-based dashboards (Sales/Admin/CEO) — fully clickable drill-down
+- **Emergent badge removed** from UI
+- Branch detail page `/branches/:id` with funnel/team/loss charts
+- User detail page `/users/:id` with timeline
+- Filter chips on Leads with URL sync
+- Interactive guide button (react-joyride)
+- PWA (manifest + SW + icons)
+- Bilingual EN/GU
 
-## P1 — Next Up
-- [ ] Extend PageHeader to remaining pages: Users, Branches, AuditLogs, Automation, Campaigns, Masters, Funnel, LeadForm
-- [ ] Mobile card layouts for Users, Branches, Campaigns lists
-- [ ] Reports & Analytics Engine (Module 15): source intel, pipeline drop-offs, loss analysis exports (CSV/Excel/PDF)
-- [ ] Master Data Management UI enhancements (Module 16): dynamic Brands/Models/Variants/Colors CRUD with search
-- [ ] Fix Radix DialogTitle a11y warning on approval/stage dialogs
-- [ ] Aggregate Registration-stage blocker messages (payment + docs in single response)
+## 🔴 P1 — Next
+- [ ] Explicit 403 for cross-branch `?branch_id=<other>` attempts (currently silently filtered)
+- [ ] Server-side aggregation for `/api/branches/{id}/performance` (include funnel + loss_reasons + sources to avoid client-side aggregation over large lead lists)
+- [ ] Pagination / top-N on Team perf table when >50 users
+- [ ] Fix mobile KPI label truncation on 390px
+- [ ] Silence Radix DialogTitle a11y warning on Change-Stage dialog
+- [ ] Reports & Analytics Engine (Module 15) — CSV/Excel/PDF exports
+- [ ] Master Data CRUD UI enhancements (Module 16)
 
-## P2 — Future
+## 🟡 P2 — Future
 - [ ] RTO Registration tracking workflow (Module 17)
-- [ ] Feedback & Retention System (Module 18) — post-delivery NPS + reminders
-- [ ] Customer Profiling Engine (Module 19) — repeat/referral tracking
-- [ ] Buying Intent Engine (Module 20) — heat-score from follow-up signals
-- [ ] Real WhatsApp Business API integration (currently mocked)
+- [ ] Feedback & Retention System (Module 18)
+- [ ] Customer Profiling Engine (Module 19)
+- [ ] Buying Intent Engine (Module 20) — heat score from call signals
+- [ ] Real WhatsApp Business API (replace mock)
 - [ ] Offline-first data sync (IndexedDB + SW background sync)
 
-## P3 — Nice to have
-- [ ] Installable PWA prompt + "Add to Home Screen" banner
-- [ ] Push notifications (followup reminders)
+## 🟢 P3 — Nice to have
+- [ ] "Add to Home Screen" install prompt banner
+- [ ] Push notifications (follow-up reminders)
 - [ ] Dark mode
-- [ ] Role-scoped guided tours refinement (multi-step flows)
-- [ ] In-app changelog/help center
+- [ ] Split `server.py` (4067 lines) into `routes/`, `models/`, `services/`
+- [ ] More advanced charts (historical trends, cohort analysis)
