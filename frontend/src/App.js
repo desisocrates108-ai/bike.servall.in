@@ -19,6 +19,7 @@ import AuditLogs from "./pages/AuditLogs";
 import Whatsapp from "./pages/Whatsapp";
 import BranchDetail from "./pages/BranchDetail";
 import UserDetail from "./pages/UserDetail";
+import Contacts from "./pages/Contacts";
 import { Toaster } from "sonner";
 
 function App() {
@@ -37,11 +38,12 @@ function App() {
             <Route path="/funnel" element={<ProtectedRoute><Funnel /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
             <Route path="/whatsapp" element={<ProtectedRoute><Whatsapp /></ProtectedRoute>} />
-            <Route path="/users" element={<ProtectedRoute roles={["super_admin", "admin"]}><UsersPage /></ProtectedRoute>} />
-            <Route path="/branches" element={<ProtectedRoute roles={["super_admin", "admin"]}><Branches /></ProtectedRoute>} />
+            <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
+            <Route path="/users" element={<ProtectedRoute roles={["super_admin"]}><UsersPage /></ProtectedRoute>} />
+            <Route path="/branches" element={<ProtectedRoute roles={["super_admin"]}><Branches /></ProtectedRoute>} />
             <Route path="/branches/:id" element={<ProtectedRoute><BranchDetail /></ProtectedRoute>} />
             <Route path="/users/:id" element={<ProtectedRoute><UserDetail /></ProtectedRoute>} />
-            <Route path="/audit-logs" element={<ProtectedRoute roles={["super_admin", "admin"]}><AuditLogs /></ProtectedRoute>} />
+            <Route path="/audit-logs" element={<ProtectedRoute roles={["super_admin"]}><AuditLogs /></ProtectedRoute>} />
             <Route path="/campaigns" element={<ProtectedRoute roles={["super_admin", "admin"]}><Campaigns /></ProtectedRoute>} />
             <Route path="/automation" element={<ProtectedRoute roles={["super_admin", "admin"]}><Automation /></ProtectedRoute>} />
             <Route path="/masters" element={<ProtectedRoute roles={["super_admin"]}><Masters /></ProtectedRoute>} />

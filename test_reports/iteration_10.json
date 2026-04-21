@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 10 — Servall CRM role hardening + global search + contacts + reminder + branch filter. Backend: 13/13 pytest PASS at /app/backend/tests/test_iter10_rbac.py — admin correctly gets 403 on POST/PUT/DELETE /api/users and on GET /api/audit-logs; admin GET /api/users still 200 (for dropdown). /api/analytics/summary?branch_id=<X> and /api/analytics/performance?branch_id=<X> correctly filter by branch for super_admin; admin is pinned to own branch even when attempting cross-branch query. /api/leads search scoping verified (admin sees only own-branch). PUT /api/leads/{id} persists next_followup_date + next_followup_time + next_followup_type; GET /api/leads/{id} round-trips all three fields. Frontend (Playwright desktop 1280x800): guide-btn ABSENT on dashboard & funnel; super_admin sidebar shows nav-users/nav-branches/nav-audit-logs; super_admin dash-branch-filter renders (All branches + options); funnel-branch-filter renders; global-search-input in page header works and returns global-search-item-<id> rows. Admin login: nav-users/nav-branches/nav-audit-logs are 0 (hidden); nav-contacts/nav-campaigns/nav-automation present; dash-branch-filter absent; direct navigation to /users, /branches, /audit-logs all show 'permission' denied UI. Sales1 login: bottom-nav-contacts=1, bottom-nav-whatsapp=0; /contacts renders 182 contact-card-<id> each with contact-call-<id> (href='tel:…') and contact-wa-<id> (href='https://wa.me/…'). manifest.json=200, service-worker.js=200, lang-en/gu present.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/users", "issue": "Creating a user without 'phone' returns 500 (pymongo DuplicateKeyError on unique phone_1 index with null value). Multiple phone-less users can't coexist. Either drop null values from the unique index (sparse/partial index) or reject empty phone at validation."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "GlobalSearch dropdown", "issue": "Dropdown results are visually rendered and Playwright sees items, but clicking a global-search-item-<id> on desktop is intercepted by the sticky PageHeader (z-20) — the subtree 'data-testid=page-header' intercepts pointer events over the dropdown area. Force-click fires but navigation to /leads/<id> does NOT happen (URL stays at current page). Fix: raise GlobalSearch results z-index to z-30+ (above the sticky PageHeader) or lift the dropdown into a portal.", "selector": "[data-testid^=\"global-search-item-\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_rbac.py",
+    "/app/test_reports/pytest/pytest_results_iter10.xml"
+  ],
+  "action_items": [
+    "HIGH: Fix z-index of GlobalSearch dropdown — currently blocked by sticky PageHeader; users can't click a global-search result on desktop. Raise dropdown z-index above PageHeader's z-20.",
+    "MEDIUM: POST /api/users without a phone returns 500 due to non-sparse unique index on users.phone. Convert to sparse/partial unique index or make phone required.",
+    "LOW (carry-over from iter9): /api/leads?branch_id=<other> for admin silently returns own-branch data — consider explicit 403.",
+    "NOTE: Reminder-dialog DOM + backend PUT are both verified. Frontend click-save of set-reminder-btn was not exercised end-to-end because we were redirected back to dashboard after blocked search click; main agent can quickly self-test by opening any /leads/<id> and verifying the dialog lifecycle."
+  ],
+  "critical_code_review_comments": [
+    "Global-search dropdown z-index is below the sticky PageHeader (z-20). This is a functional blocker — search is the iteration-10 flagship feature and results cannot be clicked on desktop.",
+    "users.phone unique index is non-sparse: any user created without phone crashes with DuplicateKeyError. Sparse or partial indexes are the MongoDB-idiomatic fix; this bug has been hidden only because every seeded user has a phone.",
+    "GuideButton.jsx still present in /app/frontend/src/components/ but no longer imported — safe to delete the file entirely to avoid future confusion.",
+    "RBAC boundary at /api/users GET is intentionally open to admin but POST/PUT/DELETE are locked to super_admin — document this in the API spec; splitting list-read from write is unusual and easy to miss during audit.",
+    "Analytics summary/performance branch_id filter: admin passing ?branch_id=<other> is silently coerced back to own branch (no 403). For clarity, return 403 so client-side branch UI fails fast."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_rbac.py (NEW — 13 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 RBAC + branch-filter analytics + reminder + search scoping)",
+    "frontend": "~92% — 1 HIGH functional issue: global-search dropdown click intercepted by sticky PageHeader on desktop. All visibility/permission/absence checks pass."
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123 (Bilimora), sales1@dealer.com/sales123 — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "No new seed. 1 throwaway TEST_iter10_<uuid>@dealer.com user is created and deleted inside test_super_admin_can_create_and_delete_user; fully cleaned up.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend cumulative regression: backend_test.py + test_modules_3_4/5_6/7_8/9_10/11_12/13_14.py + test_strict_funnel.py + test_iter9_drilldown.py + test_iter10_rbac.py. Iteration 10 contract: POST/PUT/DELETE /api/users + GET /api/audit-logs = super_admin only (admin→403). GET /api/users still open to admin. /api/leads is the unified search/list endpoint — returns a plain list (NOT paginated dict). /api/analytics/summary and /api/analytics/performance both accept optional branch_id; honored only for super_admin. LeadUpdate now includes next_followup_time. New pages/testids: /contacts, contact-card-<id>, contact-call-<id>, contact-wa-<id>, contacts-search-input, global-search-input, global-search-btn-mobile, global-search-sheet, global-search-results, global-search-item-<id>, global-search-close-mobile, dash-branch-filter (super only), funnel-branch-filter (super only), set-reminder-btn + reminder-date/time/type + save-reminder-btn, bottom-nav-contacts (sales) vs bottom-nav-whatsapp (admin/super). Existing seed: 213 leads all in ONE branch (Bilimora), 3 branches total, 18 users + 3 test roles.",
+  "rca of the issue": "GlobalSearch dropdown uses a relative-positioned container without an elevated z-index; the sticky PageHeader is set to z-20. When the dropdown renders below the input, the PageHeader's sticky bounding box overlaps the dropdown area and captures pointer events. Repro: login as any user on desktop 1280x800, type 2+ chars in global-search-input, observe results dropdown, attempt to click any result — click is intercepted, no navigation. Mitigation: set the results container to z-30 (or portal it to document.body)."
+}

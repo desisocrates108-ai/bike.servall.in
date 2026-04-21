@@ -98,6 +98,13 @@ export default function LeadDetail() {
   const [approveAction, setApproveAction] = useState(true);
   const [approveRemarks, setApproveRemarks] = useState("");
 
+  // Reminder dialog
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [remDate, setRemDate] = useState("");
+  const [remTime, setRemTime] = useState("");
+  const [remType, setRemType] = useState("Call");
+  const [remSaving, setRemSaving] = useState(false);
+
   const reload = async () => {
     const [ld, tl, fu, ng] = await Promise.all([
       api.get(`/leads/${id}`),
@@ -193,6 +200,31 @@ export default function LeadDetail() {
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail));
     }
+  };
+
+  const saveReminder = async () => {
+    if (!remDate) { toast.error("Pick a date"); return; }
+    setRemSaving(true);
+    try {
+      await api.put(`/leads/${id}`, {
+        next_followup_date: remDate,
+        next_followup_time: remTime || null,
+        next_followup_type: remType || null,
+      });
+      toast.success("Reminder set");
+      setReminderOpen(false);
+      reload();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+    }
+    setRemSaving(false);
+  };
+
+  const openReminder = () => {
+    setRemDate(lead?.next_followup_date || "");
+    setRemTime(lead?.next_followup_time || "");
+    setRemType(lead?.next_followup_type || "Call");
+    setReminderOpen(true);
   };
 
   const saveDeal = async () => {
@@ -319,7 +351,15 @@ export default function LeadDetail() {
           </div>
         </div>
 
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+          <Button
+            variant="outline"
+            onClick={openReminder}
+            className="rounded-sm font-semibold"
+            data-testid="set-reminder-btn"
+          >
+            <Clock className="w-4 h-4 mr-1" /> Set Reminder
+          </Button>
           <Dialog open={stageDialog} onOpenChange={setStageDialog}>
             <DialogTrigger asChild>
               <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold w-full sm:w-auto" data-testid="change-stage-btn">
@@ -366,6 +406,39 @@ export default function LeadDetail() {
                 <Button variant="outline" onClick={() => setStageDialog(false)}>Cancel</Button>
                 <Button onClick={submitStage} disabled={!nextStage} className="bg-brand hover:bg-brand-dark" data-testid="confirm-stage-btn">
                   Confirm
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={reminderOpen} onOpenChange={setReminderOpen}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Set Reminder</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label className="overline">Date</Label>
+                  <Input type="date" value={remDate} onChange={(e) => setRemDate(e.target.value)} className="mt-2 rounded-sm" data-testid="reminder-date" />
+                </div>
+                <div>
+                  <Label className="overline">Time</Label>
+                  <Input type="time" value={remTime} onChange={(e) => setRemTime(e.target.value)} className="mt-2 rounded-sm" data-testid="reminder-time" />
+                </div>
+                <div>
+                  <Label className="overline">Type</Label>
+                  <Select value={remType} onValueChange={setRemType}>
+                    <SelectTrigger className="mt-2 rounded-sm" data-testid="reminder-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(constants?.followup_types || ["Call", "WhatsApp", "Visit", "Email"]).map((t2) => (
+                        <SelectItem key={t2} value={t2}>{t2}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setReminderOpen(false)}>Cancel</Button>
+                <Button onClick={saveReminder} disabled={remSaving || !remDate} className="bg-brand hover:bg-brand-dark" data-testid="save-reminder-btn">
+                  {remSaving ? "Saving..." : "Save Reminder"}
                 </Button>
               </DialogFooter>
             </DialogContent>

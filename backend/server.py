@@ -349,6 +349,7 @@ class LeadUpdate(BaseModel):
     payment_mode: Optional[str] = None
     finance: Optional[FinanceInfo] = None
     next_followup_date: Optional[str] = None
+    next_followup_time: Optional[str] = None
     next_followup_type: Optional[str] = None
     notes: Optional[str] = None
 
@@ -810,7 +811,7 @@ async def list_users(
 
 
 @api.post("/users")
-async def create_user(body: UserCreate, user: dict = Depends(require_roles("super_admin", "admin"))):
+async def create_user(body: UserCreate, user: dict = Depends(require_roles("super_admin"))):
     if body.role not in ROLES:
         raise HTTPException(400, "Invalid role")
     email = body.email.lower()
@@ -849,7 +850,7 @@ async def create_user(body: UserCreate, user: dict = Depends(require_roles("supe
 
 
 @api.put("/users/{uid}")
-async def update_user(uid: str, body: UserUpdate, user: dict = Depends(require_roles("super_admin", "admin"))):
+async def update_user(uid: str, body: UserUpdate, user: dict = Depends(require_roles("super_admin"))):
     target = await db.users.find_one({"id": uid}, {"_id": 0})
     if not target:
         raise HTTPException(404, "User not found")
@@ -1094,10 +1095,10 @@ async def list_audit_logs(
     since: Optional[str] = None,  # ISO datetime
     until: Optional[str] = None,
     limit: int = 200,
-    user: dict = Depends(require_roles("super_admin", "admin")),
+    user: dict = Depends(require_roles("super_admin")),
 ):
     q: Dict[str, Any] = {}
-    # Admin sees only own-branch audit logs; super_admin sees all
+    # Super-admin only — admins no longer have audit access
     if user["role"] == "admin":
         q["branch_id"] = user.get("branch_id")
     if user_id:
@@ -1793,12 +1794,14 @@ async def download_file(fid: str, request: Request,
 # ============================================================
 
 @api.get("/analytics/summary")
-async def analytics_summary(user: dict = Depends(get_current_user)):
+async def analytics_summary(branch_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     base: Dict[str, Any] = {}
     if user["role"] == "sales_executive":
         base["assigned_to"] = user["id"]
     elif user["role"] == "admin":
         base["branch_id"] = user.get("branch_id")
+    elif user["role"] == "super_admin" and branch_id:
+        base["branch_id"] = branch_id
 
     total = await db.leads.count_documents(base)
 
@@ -1859,13 +1862,16 @@ async def analytics_summary(user: dict = Depends(get_current_user)):
 
 
 @api.get("/analytics/performance")
-async def analytics_performance(user: dict = Depends(require_roles("super_admin", "admin"))):
+async def analytics_performance(branch_id: Optional[str] = None, user: dict = Depends(require_roles("super_admin", "admin"))):
     """Per sales-executive performance metrics."""
     user_q: Dict[str, Any] = {"role": "sales_executive"}
     lead_base: Dict[str, Any] = {}
     if user["role"] == "admin":
         user_q["branch_id"] = user.get("branch_id")
         lead_base["branch_id"] = user.get("branch_id")
+    elif user["role"] == "super_admin" and branch_id:
+        user_q["branch_id"] = branch_id
+        lead_base["branch_id"] = branch_id
 
     execs = await db.users.find(user_q, {"_id": 0, "password_hash": 0}).to_list(1000)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

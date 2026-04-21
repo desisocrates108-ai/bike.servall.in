@@ -11,6 +11,7 @@
     "funnel": "Sales Funnel",
     "new_lead": "New Lead",
     "whatsapp": "WhatsApp",
+    "contacts": "Contacts",
     "admin": "Admin",
     "users": "Users",
     "branches": "Branches",
@@ -149,6 +150,7 @@
     "no_leads": "No leads yet.",
     "team": "Team",
     "top_execs": "Top performing sales executives",
+    "all_branches": "All branches",
     "connect_pct": "Connect %"
   },
   "role": {
@@ -214,5 +216,12 @@
     "sales_tasks": "Check Tasks every morning — never miss a follow-up.",
     "admin": "Monitor branch performance, funnel drop-offs, and team tracking.",
     "ceo": "Compare branches, conversion rates, and spot loss reasons."
+  },
+  "search": {
+    "placeholder": "Search name, phone, lead…",
+    "no_results": "No results"
+  },
+  "contacts": {
+    "empty": "No contacts yet."
   }
 }

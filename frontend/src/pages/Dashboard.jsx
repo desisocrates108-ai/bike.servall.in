@@ -72,18 +72,29 @@ export default function Dashboard() {
   const [perf, setPerf] = useState([]);
   const [branchCmp, setBranchCmp] = useState([]);
   const [hotLeads, setHotLeads] = useState([]);
+  const [branchFilter, setBranchFilter] = useState("");
+  const [branches, setBranches] = useState([]);
 
   useEffect(() => {
-    api.get("/analytics/summary").then((r) => setSummary(r.data)).catch(() => {});
-    if (user?.role !== "sales_executive") {
-      api.get("/analytics/performance").then((r) => setPerf(r.data)).catch(() => {});
-    }
     if (user?.role === "super_admin") {
-      api.get("/branches-compare").then((r) => setBranchCmp(r.data)).catch(() => {});
+      api.get("/branches").then((r) => setBranches(r.data || [])).catch(() => {});
     }
-    // Hot leads for action panel
-    api.get("/leads", { params: { priority: "Hot" } }).then((r) => setHotLeads((r.data || []).slice(0, 5))).catch(() => {});
   }, [user?.role]);
+
+  useEffect(() => {
+    const params = branchFilter ? { branch_id: branchFilter } : {};
+    api.get("/analytics/summary", { params }).then((r) => setSummary(r.data)).catch(() => {});
+    if (user?.role !== "sales_executive") {
+      api.get("/analytics/performance", { params }).then((r) => setPerf(r.data)).catch(() => {});
+    }
+    if (user?.role === "super_admin" && !branchFilter) {
+      api.get("/branches-compare").then((r) => setBranchCmp(r.data)).catch(() => {});
+    } else if (user?.role === "super_admin") {
+      setBranchCmp([]);
+    }
+    const leadParams = { priority: "Hot", ...(branchFilter ? { branch_id: branchFilter } : {}) };
+    api.get("/leads", { params: leadParams }).then((r) => setHotLeads((r.data || []).slice(0, 5))).catch(() => {});
+  }, [user?.role, branchFilter]);
 
   const stages = useMemo(() => Object.entries(summary?.per_stage || {}), [summary]);
   const sources = useMemo(
@@ -125,6 +136,19 @@ export default function Dashboard() {
         }
         showBack={false}
         sticky
+        right={
+          isCEO && branches.length > 0 ? (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="h-10 rounded-sm border border-zinc-200 bg-white px-3 text-sm font-medium focus:outline-none focus:border-brand"
+              data-testid="dash-branch-filter"
+            >
+              <option value="">{t("dash.all_branches", "All branches")}</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          ) : null
+        }
       />
 
       <div className="p-4 sm:p-6 max-w-[1400px] mx-auto w-full">

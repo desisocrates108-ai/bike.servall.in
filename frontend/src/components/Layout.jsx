@@ -20,9 +20,10 @@ import {
   Menu,
   X,
   Plus,
+  Contact as ContactIcon,
 } from "lucide-react";
 import LanguageToggle from "./LanguageToggle";
-import GuideButton from "./GuideButton";
+import GlobalSearch from "./GlobalSearch";
 import { roleLabel } from "../lib/labels";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 
@@ -43,6 +44,7 @@ export default function Layout({ children }) {
 
   const isSuper = user?.role === "super_admin";
   const isAdmin = user?.role === "admin" || isSuper;
+  const isSales = user?.role === "sales_executive";
 
   const SideNav = (
     <div className="flex flex-col h-full bg-white">
@@ -78,6 +80,9 @@ export default function Layout({ children }) {
         <NavLink to="/whatsapp" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-whatsapp">
           <MessageCircle className="w-4 h-4" strokeWidth={1.75} /> {t("nav.whatsapp", "WhatsApp")}
         </NavLink>
+        <NavLink to="/contacts" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-contacts">
+          <ContactIcon className="w-4 h-4" strokeWidth={1.75} /> {t("nav.contacts", "Contacts")}
+        </NavLink>
         <NavLink to="/leads/new" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-new-lead">
           <PlusCircle className="w-4 h-4" strokeWidth={1.75} /> {t("nav.new_lead")}
         </NavLink>
@@ -85,15 +90,20 @@ export default function Layout({ children }) {
         {isAdmin && (
           <div data-testid="admin-section">
             <div className="overline mt-6 mb-2 px-4">{t("nav.admin")}</div>
-            <NavLink to="/users" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-users">
-              <UserCog className="w-4 h-4" strokeWidth={1.75} /> {t("nav.users")}
-            </NavLink>
-            <NavLink to="/branches" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-branches">
-              <Building2 className="w-4 h-4" strokeWidth={1.75} /> {t("nav.branches")}
-            </NavLink>
-            <NavLink to="/audit-logs" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-audit-logs">
-              <ScrollText className="w-4 h-4" strokeWidth={1.75} /> {t("nav.audit_logs")}
-            </NavLink>
+            {/* Super-admin only: Users, Branches, Audit Logs */}
+            {isSuper && (
+              <>
+                <NavLink to="/users" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-users">
+                  <UserCog className="w-4 h-4" strokeWidth={1.75} /> {t("nav.users")}
+                </NavLink>
+                <NavLink to="/branches" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-branches">
+                  <Building2 className="w-4 h-4" strokeWidth={1.75} /> {t("nav.branches")}
+                </NavLink>
+                <NavLink to="/audit-logs" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-audit-logs">
+                  <ScrollText className="w-4 h-4" strokeWidth={1.75} /> {t("nav.audit_logs")}
+                </NavLink>
+              </>
+            )}
             <NavLink to="/campaigns" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-campaigns">
               <Megaphone className="w-4 h-4" strokeWidth={1.75} /> {t("nav.campaigns")}
             </NavLink>
@@ -171,18 +181,22 @@ export default function Layout({ children }) {
               {t("brand.name", "Servall CRM")}
             </div>
           </Link>
+          <GlobalSearch />
           <LanguageToggle />
         </div>
 
-        {/* DESKTOP TOP BAR (lang only) */}
-        <div className="hidden md:flex sticky top-0 z-20 justify-end px-6 py-3 bg-zinc-100/90 backdrop-blur border-b border-zinc-200/50">
+        {/* DESKTOP TOP BAR (search + lang) */}
+        <div className="hidden md:flex sticky top-0 z-20 items-center gap-3 px-6 py-3 bg-zinc-100/90 backdrop-blur border-b border-zinc-200/50">
+          <div className="flex-1 max-w-md">
+            <GlobalSearch />
+          </div>
           <LanguageToggle />
         </div>
 
         {children}
       </main>
 
-      {/* MOBILE BOTTOM NAV */}
+      {/* MOBILE BOTTOM NAV — role aware */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-zinc-200 flex items-stretch justify-around"
         data-testid="bottom-nav"
@@ -191,7 +205,11 @@ export default function Layout({ children }) {
         <BottomTab to="/dashboard" icon={LayoutDashboard} label={t("nav.home", "Home")} testid="bottom-nav-home" />
         <BottomTab to="/leads" icon={ListChecks} label={t("nav.leads")} testid="bottom-nav-leads" />
         <BottomTab to="/tasks" icon={CalendarClock} label={t("nav.tasks")} testid="bottom-nav-tasks" />
-        <BottomTab to="/whatsapp" icon={MessageCircle} label={t("nav.whatsapp", "WhatsApp")} testid="bottom-nav-whatsapp" />
+        {isSales ? (
+          <BottomTab to="/contacts" icon={ContactIcon} label={t("nav.contacts", "Contacts")} testid="bottom-nav-contacts" />
+        ) : (
+          <BottomTab to="/whatsapp" icon={MessageCircle} label={t("nav.whatsapp", "WhatsApp")} testid="bottom-nav-whatsapp" />
+        )}
       </nav>
 
       {/* FAB new lead */}
@@ -204,9 +222,6 @@ export default function Layout({ children }) {
       >
         <Plus className="w-6 h-6" strokeWidth={2.5} />
       </Link>
-
-      {/* Guide */}
-      <GuideButton />
     </div>
   );
 }

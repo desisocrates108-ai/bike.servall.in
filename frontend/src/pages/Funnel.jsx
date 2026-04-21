@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext";
 import { priorityStrip, priorityClass } from "../lib/labels";
 import PageHeader from "../components/PageHeader";
 
@@ -9,12 +10,24 @@ const STAGES = ["Inquiry", "Follow-up", "Interest", "Test Ride", "Deal", "Bookin
 
 export default function Funnel() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const nav = useNavigate();
   const [leads, setLeads] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [branchFilter, setBranchFilter] = useState("");
+
+  const isCEO = user?.role === "super_admin";
 
   useEffect(() => {
-    api.get("/leads").then((r) => setLeads(r.data));
-  }, []);
+    if (isCEO) {
+      api.get("/branches").then((r) => setBranches(r.data || [])).catch(() => {});
+    }
+  }, [isCEO]);
+
+  useEffect(() => {
+    const params = { page_size: 500, ...(branchFilter ? { branch_id: branchFilter } : {}) };
+    api.get("/leads", { params }).then((r) => setLeads(r.data || []));
+  }, [branchFilter]);
 
   const byStage = useMemo(() => {
     const m = Object.fromEntries(STAGES.map((s) => [s, []]));
@@ -29,6 +42,19 @@ export default function Funnel() {
         subtitle={`${leads.length} ${t("common.total", "total").toLowerCase()}`}
         showBack={false}
         sticky
+        right={
+          isCEO && branches.length > 0 ? (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="h-10 rounded-sm border border-zinc-200 bg-white px-3 text-sm font-medium focus:outline-none focus:border-brand"
+              data-testid="funnel-branch-filter"
+            >
+              <option value="">{t("dash.all_branches", "All branches")}</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          ) : null
+        }
       />
       <div className="p-3 sm:p-6 max-w-full">
         <div className="flex overflow-x-auto gap-3 pb-4 items-start" data-testid="funnel-board">
