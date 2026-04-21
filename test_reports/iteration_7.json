@@ -1,0 +1,52 @@
+{
+  "summary": "Modules 13 (Advanced User & Role Management) and 14 (Advanced Branch/POS Management) end-to-end testing complete. Backend: 19/19 pytest cases pass in /app/backend/tests/test_modules_13_14.py covering: users extended fields (phone/reporting_manager_id/joining_date/is_active), duplicate-phone 400, reporting_manager must be admin/super_admin 400, PUT toggle is_active + phone-uniqueness 400, user-performance counters (leads_total/lost/delivered/pending/followups_total/conversion_rate_pct), sales_executive self-only performance (403 on other user), user list filters (role/status/q), branch duplicate-code 400, assigned_admin must be admin 400, DELETE /branches/{bilimora} blocked 400 (linked users+194 leads), branch performance endpoint, /branches-compare super-only (admin 403), branch inactive logic (is_active=false+allow_login=false blocks sales1 login with 403 'inactive' message, allow_login=true restores login, lead creation still 403 while inactive, branch restored at test end), audit logs writes for login/login_failed/logout/lead_created/lead_updated/lead_lost/followup_created, admin auto-scoped to own branch_id, sales_executive 403, filter by action works, /permissions/modules returns {modules,actions} for admin/super_admin and 403 for sales. Frontend (Playwright, Chromium 1920x1080): super_admin sees Dashboard branch-comparison card + sidebar Branches/Audit Logs/Users, /branches shows 'New branch' button, /audit-logs renders filter panel (User/Action/Entity/From/To) + rows (lead_lost, followup_created, lead_updated, lead_created, logout, login, login_failed, branch_updated), /users renders with role/branch/status filters and TEST_M1314_ entries. Admin: nav-branches click navigates to /branches (Add button absent as expected), nav-audit-logs click navigates to /audit-logs, dashboard does NOT show Branch Comparison card (correct). sales_executive: Branches + Audit Logs links hidden in sidebar, /branches and /audit-logs direct URLs render 'You don't have permission to view this page.'",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/audit-logs?since/&until", "issue": "Since/until are matched as ISO strings via `$gte`/`$lte` directly against the stored created_at string — works for full ISO timestamps but will silently miss matches for date-only queries like since=2026-04-21 because `created_at` is stored as '2026-04-21T06:04:19...' (lexicographic ok here, but no input validation/normalisation)."},
+      {"endpoint": "PUT /api/branches/{id}", "issue": "Uses `body.model_dump()` with `v is not None` filter — setting allow_login_when_inactive=False works correctly; BUT if a caller passes `is_active=False` without allow_login_when_inactive, the existing allow flag is preserved (fine). No audit-log row contains the previous values (only fields list), which is weaker for compliance trails."},
+      {"endpoint": "GET /api/audit-logs (admin)", "issue": "Admin scoping uses `q['branch_id'] = user.branch_id` — any audit row with null branch_id (e.g., login / logout, user_deleted) will NOT appear for admins. Login rows currently carry branch_id=user's branch via log_audit, but failed-login rows often have branch_id=None, so admin won't see login_failed attempts on their own branch users. Consider `$or: [{branch_id:user.branch_id}, {branch_id:None, meta.email: <branch-users>}]` or widening to show null-branch entries too."},
+      {"endpoint": "GET /api/users/{id}/performance", "issue": "`leads_pending` excludes stages Lost/Registration/Feedback but INCLUDES stage='Delivery' even though Delivery is counted in leads_delivered — same lead is counted twice (once delivered, once pending). Adjust to `stage: {$nin: [Lost, Delivery, Registration, Feedback]}`."},
+      {"endpoint": "POST /api/branches", "issue": "`body.is_active` defaults to True but never validated against presence of `assigned_admin_id`; a branch can be created active without an admin — acceptable but surface as a soft warning in UI."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Audit Logs table", "issues": ["Meta column overflows for large JSON payloads; consider expand/collapse or max-w + truncate with tooltip."]},
+      {"screen": "Branches table", "issues": ["Status column uses 'Active' green badge only — no visible state for inactive branches in current seed; confirmed logic via API toggle, but UI branch-inactive state + 'Allow login' grey badge are untested visually (all 3 seeded branches are active)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_modules_13_14.py",
+    "/app/test_reports/pytest/pytest_results_iter7.xml"
+  ],
+  "action_items": [
+    "Fix user-performance `leads_pending` double-counting Delivery stage (server.py ~911).",
+    "Decide admin audit-logs visibility rule for rows with null branch_id (login_failed, user_deleted) — currently hidden from admins.",
+    "Consider capturing old→new diff in branch_updated / user_updated audit meta for full compliance trail, not just field names.",
+    "UI: render inactive-branch row styling + 'Login when inactive' badge states (currently untested visually as all seeds are active). Consider a follow-up screenshot test after toggling one branch."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 4066 lines — the splitting-into-routers debt continues. Modules 13/14 added ~450 lines on top of the already-overdue refactor.",
+    "log_audit is called from >15 endpoints; swallowed exceptions (try/except pass if present) are fine but ensure indexes on (actor_id, action, entity_id, created_at DESC) — confirmed created, good.",
+    "Branch inactive check in login() uses `branch.get('allow_login_when_inactive', True)` default=True — business intent is 'allow by default' which matches review, but inline default should mirror the seed default (True) and the POST default (True). Triple-source default — extract to a constant.",
+    "UserUpdate.model is permissive — no cross-field validation that `role=sales_executive` implies `reporting_manager_id` is set. Given the module spec requires it, either enforce at PUT/POST or document as advisory.",
+    "GET /api/users list admin scoping uses `$or: [{branch_id:user.branch_id},{role:'admin'}]` — surfaces all admins across all branches to any admin (so Bilimora admin sees Gandevi admin). Intended? If not, restrict to same-branch + super_admin only.",
+    "DELETE /api/branches/{bid} message 'Cannot delete — N users and M leads are linked. Deactivate instead.' is helpful; consider also blocking when bookings/deliveries reference branch (currently only users+leads checked)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_modules_13_14.py (new, 19 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 Modules 13 & 14)",
+    "frontend": "100% of role-based UI flows validated (super nav + branch-comparison card + branches/audit-logs/users; admin routes + no add-btn + no compare-card; sales denied)"
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123 (Bilimora), sales1@dealer.com/sales123 (Bilimora), sales4@dealer.com/sales123 (Gandevi) — verified from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Tests create TEST_M1314_ prefixed users (sales_executive role, Bilimora branch) — ~6 new users per run. One TEST_M1314_Lead* lead is created and progressed to 'Lost' per run. Branch inactive test temporarily flips Bilimora.is_active=false/allow_login_when_inactive=false then restores to is_active=true/allow_login_when_inactive=true in the finally block — verified after run: Bilimora back to Active + Allowed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Cumulative regression: test_modules_3_4.py (14, has 62s sleep), 5_6.py (18), 7_8.py (19), 9_10.py, 11_12.py (24), 13_14.py (19). Stage-change endpoint uses body.stage (NOT body.to_stage). Follow-up POST requires body.scheduled_date (NOT next_followup_date). Followup body must include `type` (FOLLOWUP_TYPES). Audit log actions observed: login/login_failed/logout/lead_created/lead_updated/lead_lost/deal_closed/stage_changed/followup_created/user_created/user_updated/user_deleted/branch_created/branch_updated/branch_deleted. /permissions/modules returns CRM_MODULES + PERMISSION_ACTIONS (schema-only, not enforced). Bilimora branch has 194 leads + users → DELETE always returns 400. allow_login_when_inactive default=True on seed + POST + update.",
+  "rca of the issue": "No blocking bug found. Noted one real logic bug (non-blocking): user_performance.leads_pending double-counts Delivery stage — action item logged. Audit log admin-scoping for null-branch rows is a design decision to confirm, not a bug. All 19 pytest cases green; frontend role-based flows all behave per spec."
+}

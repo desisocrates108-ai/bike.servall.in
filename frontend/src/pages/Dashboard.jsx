@@ -41,11 +41,15 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [perf, setPerf] = useState([]);
+  const [branchCmp, setBranchCmp] = useState([]);
 
   useEffect(() => {
     api.get("/analytics/summary").then((r) => setSummary(r.data)).catch(() => {});
     if (user?.role !== "sales_executive") {
       api.get("/analytics/performance").then((r) => setPerf(r.data)).catch(() => {});
+    }
+    if (user?.role === "super_admin") {
+      api.get("/branches-compare").then((r) => setBranchCmp(r.data)).catch(() => {});
     }
   }, [user?.role]);
 
@@ -181,6 +185,52 @@ export default function Dashboard() {
                     <td className="font-mono text-amber-700">{p.missed_followups}</td>
                     <td className="font-mono">{p.connect_rate}%</td>
                     <td className="font-mono font-bold">{p.conversion_rate}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {user?.role === "super_admin" && branchCmp.length > 0 && (
+        <Card className="mt-6" testid="branch-compare-card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="overline">Branch comparison</div>
+              <div className="text-sm text-zinc-500 mt-1">Leads, conversions and revenue across all active branches.</div>
+            </div>
+            <Link to="/branches" className="text-xs font-semibold text-zinc-900 hover:underline">View all →</Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table w-full">
+              <thead>
+                <tr>
+                  <th>Branch</th>
+                  <th>Code</th>
+                  <th>Status</th>
+                  <th>Leads</th>
+                  <th>Converted</th>
+                  <th>Lost</th>
+                  <th>Conv %</th>
+                  <th>Revenue (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branchCmp.map((b) => (
+                  <tr key={b.branch_id} data-testid={`branch-cmp-row-${b.branch_id}`}>
+                    <td className="font-semibold">{b.name}</td>
+                    <td className="font-mono text-xs">{b.code || "—"}</td>
+                    <td>
+                      <span className={`inline-block px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase ${b.is_active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"}`}>
+                        {b.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="font-mono">{b.leads_total}</td>
+                    <td className="font-mono text-emerald-700">{b.leads_delivered}</td>
+                    <td className="font-mono text-rose-700">{b.leads_lost}</td>
+                    <td className="font-mono font-bold">{b.conversion_rate_pct}%</td>
+                    <td className="font-mono">{Number(b.revenue || 0).toLocaleString("en-IN")}</td>
                   </tr>
                 ))}
               </tbody>

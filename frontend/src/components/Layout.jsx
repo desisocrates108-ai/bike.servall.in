@@ -14,6 +14,8 @@ import {
   CalendarClock,
   Megaphone,
   Zap,
+  Building2,
+  ScrollText,
 } from "lucide-react";
 import { roleLabel } from "../lib/labels";
 
@@ -70,6 +72,12 @@ export default function Layout({ children }) {
               <div className="overline mt-6 mb-2 px-4">Admin</div>
               <NavLink to="/users" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-users">
                 <UserCog className="w-4 h-4" strokeWidth={1.75} /> Users
+              </NavLink>
+              <NavLink to="/branches" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-branches">
+                <Building2 className="w-4 h-4" strokeWidth={1.75} /> Branches
+              </NavLink>
+              <NavLink to="/audit-logs" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-audit-logs">
+                <ScrollText className="w-4 h-4" strokeWidth={1.75} /> Audit Logs
               </NavLink>
               <NavLink to="/campaigns" className={({ isActive }) => `${navItem} ${isActive ? activeItem : ""}`} data-testid="nav-campaigns">
                 <Megaphone className="w-4 h-4" strokeWidth={1.75} /> Campaigns

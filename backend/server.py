@@ -105,6 +105,15 @@ DOC_REQUIREMENTS = {
 }
 ROLES = ["super_admin", "admin", "sales_executive"]
 
+# Module-level permission keys — schema-only (future-ready). Current RBAC still rules.
+CRM_MODULES = [
+    "leads", "followups", "deals", "bookings", "allotments",
+    "documents", "delivery", "payments", "finance", "exchange",
+    "whatsapp", "campaigns", "automation", "users", "branches",
+    "audit_logs", "masters",
+]
+PERMISSION_ACTIONS = ["view", "create", "edit", "delete"]
+
 # Configurable knobs
 DISCOUNT_APPROVAL_THRESHOLD = 5000.0   # ₹ discount above this needs manager approval
 FOLLOWUP_MIN_GAP_SECONDS = 60          # prevent duplicate rapid entries
@@ -195,22 +204,44 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
+    phone: Optional[str] = None
     role: str = "sales_executive"
     branch_id: Optional[str] = None
+    reporting_manager_id: Optional[str] = None
+    joining_date: Optional[str] = None  # YYYY-MM-DD
+    permissions: Optional[Dict[str, Dict[str, bool]]] = None  # future-ready, not enforced
 
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    phone: Optional[str] = None
     role: Optional[str] = None
     branch_id: Optional[str] = None
+    reporting_manager_id: Optional[str] = None
+    joining_date: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+    permissions: Optional[Dict[str, Dict[str, bool]]] = None
 
 
 class BranchIn(BaseModel):
     name: str
     code: Optional[str] = None
+    city: Optional[str] = None
     address: Optional[str] = None
+    assigned_admin_id: Optional[str] = None
+    is_active: Optional[bool] = True
+    allow_login_when_inactive: Optional[bool] = True
+
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
+    assigned_admin_id: Optional[str] = None
+    is_active: Optional[bool] = None
+    allow_login_when_inactive: Optional[bool] = None
 
 
 class BrandIn(BaseModel):
@@ -605,6 +636,35 @@ async def add_timeline(lead_id: str, event: str, actor: dict, meta: Optional[dic
     })
 
 
+async def log_audit(
+    actor: Optional[dict],
+    action: str,
+    *,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    branch_id: Optional[str] = None,
+    meta: Optional[dict] = None,
+    status: str = "success",
+):
+    """Append-only audit log. Never raises — audit MUST NOT break the request."""
+    try:
+        await db.audit_logs.insert_one({
+            "id": str(uuid.uuid4()),
+            "actor_id": (actor or {}).get("id"),
+            "actor_name": (actor or {}).get("name"),
+            "actor_role": (actor or {}).get("role"),
+            "action": action,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "branch_id": branch_id or (actor or {}).get("branch_id"),
+            "status": status,
+            "meta": meta or {},
+            "created_at": now_iso(),
+        })
+    except Exception as e:
+        logger.warning(f"audit log failed: {e}")
+
+
 async def can_access_lead(user: dict, lead: dict) -> bool:
     if user["role"] == "super_admin":
         return True
@@ -666,23 +726,47 @@ def get_object(path: str):
 # ============================================================
 
 @api.post("/auth/login")
-async def login(body: LoginIn, response: Response):
+async def login(body: LoginIn, response: Response, request: Request):
     email = body.email.lower()
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
+        await log_audit(None, "login_failed",
+                        entity_type="user", meta={"email": email},
+                        status="failed")
         raise HTTPException(401, "Invalid email or password")
     if not user.get("is_active", True):
+        await log_audit(user, "login_failed",
+                        entity_type="user", entity_id=user["id"],
+                        meta={"reason": "account_disabled"}, status="failed")
         raise HTTPException(403, "Account disabled")
+    # Branch-inactive gate (per-branch override)
+    if user.get("branch_id"):
+        branch = await db.branches.find_one({"id": user["branch_id"]}, {"_id": 0})
+        if branch and branch.get("is_active") is False and not branch.get("allow_login_when_inactive", True):
+            await log_audit(user, "login_failed",
+                            entity_type="user", entity_id=user["id"],
+                            meta={"reason": "branch_inactive", "branch_id": branch["id"]},
+                            status="failed")
+            raise HTTPException(403, "Your branch is currently inactive")
     access = create_access_token(user["id"], user["email"], user["role"])
     refresh = create_refresh_token(user["id"])
     set_auth_cookies(response, access, refresh)
+    await log_audit(user, "login", entity_type="user", entity_id=user["id"])
     return {"user": public_user(user), "access_token": access}
 
 
 @api.post("/auth/logout")
-async def logout(response: Response):
+async def logout(response: Response, request: Request):
+    # Best-effort actor extraction (do not fail logout on missing token)
+    actor = None
+    try:
+        actor = await get_current_user(request)  # type: ignore
+    except Exception:
+        pass
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
+    if actor:
+        await log_audit(actor, "logout", entity_type="user", entity_id=actor.get("id"))
     return {"ok": True}
 
 
@@ -696,12 +780,31 @@ async def me(user: dict = Depends(get_current_user)):
 # ============================================================
 
 @api.get("/users")
-async def list_users(user: dict = Depends(get_current_user)):
+async def list_users(
+    role: Optional[str] = None,
+    branch_id: Optional[str] = None,
+    status: Optional[str] = None,  # "active" | "inactive"
+    q: Optional[str] = None,  # name/email/phone search
+    user: dict = Depends(get_current_user),
+):
     query: Dict[str, Any] = {}
     if user["role"] == "admin":
         query = {"$or": [{"branch_id": user.get("branch_id")}, {"role": "admin"}]}
     elif user["role"] == "sales_executive":
         query = {"id": user["id"]}
+    if role:
+        if role not in ROLES:
+            raise HTTPException(400, "Invalid role filter")
+        query["role"] = role
+    if branch_id:
+        query["branch_id"] = branch_id
+    if status == "active":
+        query["is_active"] = True
+    elif status == "inactive":
+        query["is_active"] = False
+    if q:
+        qx = {"$regex": q, "$options": "i"}
+        query["$and"] = [{"$or": [{"name": qx}, {"email": qx}, {"phone": qx}]}]
     users = await db.users.find(query, {"_id": 0, "password_hash": 0}).to_list(1000)
     return users
 
@@ -713,22 +816,35 @@ async def create_user(body: UserCreate, user: dict = Depends(require_roles("supe
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "Email already exists")
+    if body.phone and await db.users.find_one({"phone": body.phone}):
+        raise HTTPException(400, "Phone number already exists")
     if user["role"] == "admin" and body.role == "super_admin":
         raise HTTPException(403, "Cannot create super admin")
     branch_id = body.branch_id
     if user["role"] == "admin":
         branch_id = user.get("branch_id")
+    # Validate reporting_manager (must be admin or super_admin)
+    if body.reporting_manager_id:
+        mgr = await db.users.find_one({"id": body.reporting_manager_id}, {"_id": 0})
+        if not mgr or mgr["role"] not in ("admin", "super_admin"):
+            raise HTTPException(400, "reporting_manager_id must be an admin or super_admin user")
     doc = {
         "id": str(uuid.uuid4()),
         "email": email,
         "password_hash": hash_password(body.password),
         "name": body.name,
+        "phone": body.phone,
         "role": body.role,
         "branch_id": branch_id,
+        "reporting_manager_id": body.reporting_manager_id,
+        "joining_date": body.joining_date,
+        "permissions": body.permissions or {},
         "is_active": True,
         "created_at": now_iso(),
     }
     await db.users.insert_one(doc)
+    await log_audit(user, "user_created", entity_type="user", entity_id=doc["id"],
+                    meta={"role": body.role, "branch_id": branch_id})
     return public_user(doc)
 
 
@@ -739,8 +855,20 @@ async def update_user(uid: str, body: UserUpdate, user: dict = Depends(require_r
         raise HTTPException(404, "User not found")
     if user["role"] == "admin" and target.get("branch_id") != user.get("branch_id") and target["id"] != user["id"]:
         raise HTTPException(403, "Cannot edit users outside branch")
+    if user["role"] == "admin" and body.role == "super_admin":
+        raise HTTPException(403, "Cannot promote to super admin")
+    # phone uniqueness
+    if body.phone and body.phone != target.get("phone"):
+        dup = await db.users.find_one({"phone": body.phone, "id": {"$ne": uid}})
+        if dup:
+            raise HTTPException(400, "Phone number already in use")
+    if body.reporting_manager_id:
+        mgr = await db.users.find_one({"id": body.reporting_manager_id}, {"_id": 0})
+        if not mgr or mgr["role"] not in ("admin", "super_admin"):
+            raise HTTPException(400, "reporting_manager_id must be an admin or super_admin user")
     updates: Dict[str, Any] = {}
-    for field in ["name", "role", "branch_id", "is_active"]:
+    for field in ["name", "phone", "role", "branch_id", "reporting_manager_id",
+                  "joining_date", "is_active", "permissions"]:
         v = getattr(body, field)
         if v is not None:
             updates[field] = v
@@ -748,6 +876,8 @@ async def update_user(uid: str, body: UserUpdate, user: dict = Depends(require_r
         updates["password_hash"] = hash_password(body.password)
     if updates:
         await db.users.update_one({"id": uid}, {"$set": updates})
+        await log_audit(user, "user_updated", entity_type="user", entity_id=uid,
+                        meta={"fields": list(updates.keys())})
     fresh = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
     return fresh
 
@@ -756,8 +886,42 @@ async def update_user(uid: str, body: UserUpdate, user: dict = Depends(require_r
 async def delete_user(uid: str, user: dict = Depends(require_roles("super_admin"))):
     if uid == user["id"]:
         raise HTTPException(400, "Cannot delete yourself")
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
     await db.users.delete_one({"id": uid})
+    await log_audit(user, "user_deleted", entity_type="user", entity_id=uid,
+                    meta={"email": (target or {}).get("email")})
     return {"ok": True}
+
+
+@api.get("/users/{uid}/performance")
+async def user_performance(uid: str, user: dict = Depends(get_current_user)):
+    target = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(404, "User not found")
+    # Visibility: super_admin all; admin for own branch; sales_executive for self only
+    if user["role"] == "sales_executive" and uid != user["id"]:
+        raise HTTPException(403, "Access denied")
+    if user["role"] == "admin" and target.get("branch_id") != user.get("branch_id") and uid != user["id"]:
+        raise HTTPException(403, "Access denied")
+    leads_total = await db.leads.count_documents({"assigned_to": uid})
+    leads_lost = await db.leads.count_documents({"assigned_to": uid, "stage": "Lost"})
+    leads_delivered = await db.leads.count_documents({"assigned_to": uid, "stage": {"$in": ["Delivery", "Registration", "Feedback"]}})
+    followups_total = await db.followups.count_documents({"created_by": uid})
+    pending = await db.leads.count_documents({
+        "assigned_to": uid, "stage": {"$nin": ["Lost", "Registration", "Feedback"]}
+    })
+    conv_rate = round((leads_delivered / leads_total * 100), 1) if leads_total else 0.0
+    return {
+        "user_id": uid,
+        "name": target.get("name"),
+        "branch_id": target.get("branch_id"),
+        "leads_total": leads_total,
+        "leads_lost": leads_lost,
+        "leads_delivered": leads_delivered,
+        "leads_pending": pending,
+        "followups_total": followups_total,
+        "conversion_rate_pct": conv_rate,
+    }
 
 
 # ============================================================
@@ -770,22 +934,195 @@ async def _list_collection(name: str):
 
 # Branches
 @api.get("/branches")
-async def list_branches(user: dict = Depends(get_current_user)):
-    return await _list_collection("branches")
+async def list_branches(
+    is_active: Optional[bool] = None,
+    user: dict = Depends(get_current_user),
+):
+    q: Dict[str, Any] = {}
+    if is_active is not None:
+        q["is_active"] = is_active
+    items = await db.branches.find(q, {"_id": 0}).sort("name", 1).to_list(1000)
+    return items
+
+
+@api.get("/branches/{bid}")
+async def get_branch(bid: str, user: dict = Depends(get_current_user)):
+    b = await db.branches.find_one({"id": bid}, {"_id": 0})
+    if not b:
+        raise HTTPException(404, "Branch not found")
+    return b
 
 
 @api.post("/branches")
 async def create_branch(body: BranchIn, user: dict = Depends(require_roles("super_admin"))):
-    doc = {"id": str(uuid.uuid4()), "name": body.name, "code": body.code,
-           "address": body.address, "created_at": now_iso()}
+    if body.code:
+        if await db.branches.find_one({"code": body.code}):
+            raise HTTPException(400, "Branch code already exists")
+    if body.assigned_admin_id:
+        mgr = await db.users.find_one({"id": body.assigned_admin_id}, {"_id": 0})
+        if not mgr or mgr["role"] not in ("admin", "super_admin"):
+            raise HTTPException(400, "assigned_admin_id must be an admin or super_admin user")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": body.name,
+        "code": body.code,
+        "city": body.city,
+        "address": body.address,
+        "assigned_admin_id": body.assigned_admin_id,
+        "is_active": True if body.is_active is None else body.is_active,
+        "allow_login_when_inactive": True if body.allow_login_when_inactive is None else body.allow_login_when_inactive,
+        "created_at": now_iso(),
+    }
     await db.branches.insert_one(doc)
+    await log_audit(user, "branch_created", entity_type="branch", entity_id=doc["id"],
+                    meta={"name": doc["name"], "code": doc["code"]})
     return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.put("/branches/{bid}")
+async def update_branch(bid: str, body: BranchUpdate, user: dict = Depends(require_roles("super_admin"))):
+    target = await db.branches.find_one({"id": bid}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Branch not found")
+    if body.code and body.code != target.get("code"):
+        dup = await db.branches.find_one({"code": body.code, "id": {"$ne": bid}})
+        if dup:
+            raise HTTPException(400, "Branch code already in use")
+    if body.assigned_admin_id:
+        mgr = await db.users.find_one({"id": body.assigned_admin_id}, {"_id": 0})
+        if not mgr or mgr["role"] not in ("admin", "super_admin"):
+            raise HTTPException(400, "assigned_admin_id must be an admin or super_admin user")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        await db.branches.update_one({"id": bid}, {"$set": updates})
+        await log_audit(user, "branch_updated", entity_type="branch", entity_id=bid,
+                        meta={"fields": list(updates.keys())})
+    return await db.branches.find_one({"id": bid}, {"_id": 0})
 
 
 @api.delete("/branches/{bid}")
 async def delete_branch(bid: str, user: dict = Depends(require_roles("super_admin"))):
+    # Safety: block deletion if users or leads reference this branch
+    uc = await db.users.count_documents({"branch_id": bid})
+    lc = await db.leads.count_documents({"branch_id": bid})
+    if uc or lc:
+        raise HTTPException(400, f"Cannot delete — {uc} users and {lc} leads are linked. Deactivate instead.")
     await db.branches.delete_one({"id": bid})
+    await log_audit(user, "branch_deleted", entity_type="branch", entity_id=bid)
     return {"ok": True}
+
+
+@api.get("/branches/{bid}/performance")
+async def branch_performance(bid: str, user: dict = Depends(get_current_user)):
+    branch = await db.branches.find_one({"id": bid}, {"_id": 0})
+    if not branch:
+        raise HTTPException(404, "Branch not found")
+    if user["role"] == "admin" and bid != user.get("branch_id"):
+        raise HTTPException(403, "Access denied")
+    if user["role"] == "sales_executive" and bid != user.get("branch_id"):
+        raise HTTPException(403, "Access denied")
+    leads_total = await db.leads.count_documents({"branch_id": bid})
+    leads_lost = await db.leads.count_documents({"branch_id": bid, "stage": "Lost"})
+    leads_delivered = await db.leads.count_documents({
+        "branch_id": bid, "stage": {"$in": ["Delivery", "Registration", "Feedback"]}
+    })
+    users_count = await db.users.count_documents({"branch_id": bid, "is_active": True})
+    # Revenue: sum of bookings.final_deal_price for delivered bookings in this branch
+    pipeline = [
+        {"$match": {"branch_id": bid, "status": "Delivered"}},
+        {"$group": {"_id": None, "total": {"$sum": "$final_deal_price"}}},
+    ]
+    agg = await db.bookings.aggregate(pipeline).to_list(1)
+    revenue = float(agg[0]["total"]) if agg else 0.0
+    conv_rate = round((leads_delivered / leads_total * 100), 1) if leads_total else 0.0
+    return {
+        "branch_id": bid,
+        "name": branch.get("name"),
+        "code": branch.get("code"),
+        "is_active": branch.get("is_active", True),
+        "leads_total": leads_total,
+        "leads_lost": leads_lost,
+        "leads_delivered": leads_delivered,
+        "conversion_rate_pct": conv_rate,
+        "active_users": users_count,
+        "revenue": revenue,
+    }
+
+
+@api.get("/branches-compare")
+async def branches_compare(user: dict = Depends(require_roles("super_admin"))):
+    branches = await db.branches.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+    out = []
+    for b in branches:
+        leads_total = await db.leads.count_documents({"branch_id": b["id"]})
+        leads_lost = await db.leads.count_documents({"branch_id": b["id"], "stage": "Lost"})
+        leads_delivered = await db.leads.count_documents({
+            "branch_id": b["id"], "stage": {"$in": ["Delivery", "Registration", "Feedback"]}
+        })
+        pipeline = [
+            {"$match": {"branch_id": b["id"], "status": "Delivered"}},
+            {"$group": {"_id": None, "total": {"$sum": "$final_deal_price"}}},
+        ]
+        agg = await db.bookings.aggregate(pipeline).to_list(1)
+        revenue = float(agg[0]["total"]) if agg else 0.0
+        conv_rate = round((leads_delivered / leads_total * 100), 1) if leads_total else 0.0
+        out.append({
+            "branch_id": b["id"],
+            "name": b["name"],
+            "code": b.get("code"),
+            "is_active": b.get("is_active", True),
+            "leads_total": leads_total,
+            "leads_lost": leads_lost,
+            "leads_delivered": leads_delivered,
+            "conversion_rate_pct": conv_rate,
+            "revenue": revenue,
+        })
+    return out
+
+
+# ============================================================
+# Audit Logs
+# ============================================================
+
+@api.get("/audit-logs")
+async def list_audit_logs(
+    user_id: Optional[str] = None,
+    action: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    since: Optional[str] = None,  # ISO datetime
+    until: Optional[str] = None,
+    limit: int = 200,
+    user: dict = Depends(require_roles("super_admin", "admin")),
+):
+    q: Dict[str, Any] = {}
+    # Admin sees only own-branch audit logs; super_admin sees all
+    if user["role"] == "admin":
+        q["branch_id"] = user.get("branch_id")
+    if user_id:
+        q["actor_id"] = user_id
+    if action:
+        q["action"] = action
+    if entity_type:
+        q["entity_type"] = entity_type
+    if entity_id:
+        q["entity_id"] = entity_id
+    if since or until:
+        created: Dict[str, Any] = {}
+        if since:
+            created["$gte"] = since
+        if until:
+            created["$lte"] = until
+        q["created_at"] = created
+    limit = max(1, min(limit, 1000))
+    items = await db.audit_logs.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return items
+
+
+@api.get("/permissions/modules")
+async def list_permission_modules(user: dict = Depends(require_roles("super_admin", "admin"))):
+    """Return the module & action catalog for the permissions UI (future-ready)."""
+    return {"modules": CRM_MODULES, "actions": PERMISSION_ACTIONS}
 
 
 # Brands
@@ -933,6 +1270,8 @@ async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
     branch = await db.branches.find_one({"id": body.branch_id}, {"_id": 0})
     if not branch:
         raise HTTPException(400, "Invalid branch")
+    if branch.get("is_active") is False:
+        raise HTTPException(403, "Branch is inactive — cannot create new leads")
     assigned_to = body.assigned_to
     if user["role"] == "sales_executive":
         assigned_to = user["id"]
@@ -961,6 +1300,9 @@ async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
         await fire_event("inquiry_created", doc, user)
     except Exception as _e:
         logger.warning(f"inquiry_created fire_event failed: {_e}")
+    await log_audit(user, "lead_created", entity_type="lead", entity_id=lead_id,
+                    branch_id=body.branch_id,
+                    meta={"source": body.source, "priority": body.priority})
     return await db.leads.find_one({"id": lead_id}, {"_id": 0})
 
 
@@ -1027,6 +1369,9 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
         await add_timeline(lid, "Lead Updated", user, {"fields": list(updates.keys())})
         if "assigned_to" in updates:
             await add_timeline(lid, "Lead Assigned", user, {"assigned_to": updates["assigned_to"]})
+        await log_audit(user, "lead_updated", entity_type="lead", entity_id=lid,
+                        branch_id=lead.get("branch_id"),
+                        meta={"fields": list(updates.keys())})
     return await db.leads.find_one({"id": lid}, {"_id": 0})
 
 
@@ -1137,6 +1482,14 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
                              {"from_stage": lead.get("stage"), "to_stage": body.stage})
     except Exception as _e:
         logger.warning(f"stage_changed fire_event failed: {_e}")
+    # Audit: special flag for deal closure (conversions)
+    action = "deal_closed" if body.stage in ("Delivery", "Registration", "Feedback") else "stage_changed"
+    if body.stage == "Lost":
+        action = "lead_lost"
+    await log_audit(user, action, entity_type="lead", entity_id=lid,
+                    branch_id=lead.get("branch_id"),
+                    meta={"from": lead.get("stage"), "to": body.stage,
+                          "lost_reason": body.lost_reason})
     return fresh
 
 
@@ -1260,6 +1613,10 @@ async def add_followup(lid: str, body: FollowupIn, user: dict = Depends(get_curr
          "call_status": body.call_status, "response": body.customer_response,
          "outcome": body.outcome_tag},
     )
+    await log_audit(user, "followup_created", entity_type="followup", entity_id=doc["id"],
+                    branch_id=lead.get("branch_id"),
+                    meta={"lead_id": lid, "type": body.type,
+                          "scheduled_date": sched, "outcome": body.outcome_tag})
     return {k: v for k, v in doc.items() if k != "_id"}
 
 
@@ -3372,21 +3729,53 @@ async def seed_data():
     await db.wa_messages.create_index("campaign_id")
     await db.wa_optouts.create_index("lead_id", unique=True)
     await db.campaigns.create_index("status")
+    await db.audit_logs.create_index([("created_at", -1)])
+    await db.audit_logs.create_index("actor_id")
+    await db.audit_logs.create_index("branch_id")
+    await db.audit_logs.create_index("action")
+    # Sparse unique so legacy records without phone / code still work
+    try:
+        await db.users.create_index("phone", unique=True, sparse=True)
+    except Exception as e:
+        logger.warning(f"users.phone index failed: {e}")
+    try:
+        await db.branches.create_index("code", unique=True, sparse=True)
+    except Exception as e:
+        logger.warning(f"branches.code index failed: {e}")
 
     # Branches
     branch_defs = [
-        {"name": "Bilimora", "code": "BLM"},
-        {"name": "Chikhli", "code": "CHK"},
-        {"name": "Gandevi", "code": "GND"},
+        {"name": "Bilimora", "code": "BLM", "city": "Bilimora"},
+        {"name": "Chikhli", "code": "CHK", "city": "Chikhli"},
+        {"name": "Gandevi", "code": "GND", "city": "Gandevi"},
     ]
     branches = {}
     for b in branch_defs:
         existing = await db.branches.find_one({"name": b["name"]}, {"_id": 0})
         if existing:
+            # Backfill new fields on older records
+            patch = {}
+            if existing.get("is_active") is None:
+                patch["is_active"] = True
+            if existing.get("allow_login_when_inactive") is None:
+                patch["allow_login_when_inactive"] = True
+            if not existing.get("code"):
+                patch["code"] = b["code"]
+            if not existing.get("city"):
+                patch["city"] = b["city"]
+            if patch:
+                await db.branches.update_one({"id": existing["id"]}, {"$set": patch})
+                existing.update(patch)
             branches[b["name"]] = existing
         else:
-            doc = {"id": str(uuid.uuid4()), "name": b["name"], "code": b["code"],
-                   "address": None, "created_at": now_iso()}
+            doc = {
+                "id": str(uuid.uuid4()), "name": b["name"], "code": b["code"],
+                "city": b["city"], "address": None,
+                "assigned_admin_id": None,
+                "is_active": True,
+                "allow_login_when_inactive": True,
+                "created_at": now_iso(),
+            }
             await db.branches.insert_one(doc)
             branches[b["name"]] = doc
 
@@ -3445,41 +3834,69 @@ async def seed_data():
     # Users
     user_defs = [
         {"email": "superadmin@dealer.com", "password": "super123", "name": "Super Admin",
-         "role": "super_admin", "branch": None},
+         "phone": "9000000000", "role": "super_admin", "branch": None, "manager": None},
         {"email": "admin@dealer.com", "password": "admin123", "name": "Ravi Admin",
-         "role": "admin", "branch": "Bilimora"},
+         "phone": "9000000001", "role": "admin", "branch": "Bilimora",
+         "manager": "superadmin@dealer.com"},
         {"email": "sales1@dealer.com", "password": "sales123", "name": "Priya Sales",
-         "role": "sales_executive", "branch": "Bilimora"},
+         "phone": "9000000011", "role": "sales_executive", "branch": "Bilimora",
+         "manager": "admin@dealer.com"},
         {"email": "sales2@dealer.com", "password": "sales123", "name": "Amit Sales",
-         "role": "sales_executive", "branch": "Bilimora"},
+         "phone": "9000000012", "role": "sales_executive", "branch": "Bilimora",
+         "manager": "admin@dealer.com"},
         {"email": "sales3@dealer.com", "password": "sales123", "name": "Neha Sales",
-         "role": "sales_executive", "branch": "Chikhli"},
+         "phone": "9000000013", "role": "sales_executive", "branch": "Chikhli",
+         "manager": "admin@dealer.com"},
         {"email": "sales4@dealer.com", "password": "sales123", "name": "Vikram Sales",
-         "role": "sales_executive", "branch": "Gandevi"},
+         "phone": "9000000014", "role": "sales_executive", "branch": "Gandevi",
+         "manager": "admin@dealer.com"},
     ]
+    # First pass: upsert users (without manager resolved)
     for u in user_defs:
         existing = await db.users.find_one({"email": u["email"]})
         branch_id = branches[u["branch"]]["id"] if u["branch"] else None
+        base = {
+            "name": u["name"],
+            "phone": u["phone"],
+            "role": u["role"],
+            "branch_id": branch_id,
+            "is_active": True,
+            "joining_date": existing.get("joining_date") if existing else "2025-01-01",
+            "permissions": (existing or {}).get("permissions") or {},
+        }
         if not existing:
             await db.users.insert_one({
                 "id": str(uuid.uuid4()),
                 "email": u["email"],
                 "password_hash": hash_password(u["password"]),
-                "name": u["name"],
-                "role": u["role"],
-                "branch_id": branch_id,
-                "is_active": True,
                 "created_at": now_iso(),
+                "joining_date": "2025-01-01",
+                **{k: v for k, v in base.items() if k != "joining_date"},
             })
         else:
-            # Ensure password matches seed
+            # Ensure password matches seed and backfill new fields
+            patch = dict(base)
             if not verify_password(u["password"], existing["password_hash"]):
-                await db.users.update_one(
-                    {"email": u["email"]},
-                    {"$set": {"password_hash": hash_password(u["password"]),
-                              "role": u["role"], "branch_id": branch_id,
-                              "is_active": True, "name": u["name"]}}
-                )
+                patch["password_hash"] = hash_password(u["password"])
+            await db.users.update_one({"email": u["email"]}, {"$set": patch})
+
+    # Second pass: resolve reporting_manager_id by email
+    email_to_id: Dict[str, str] = {}
+    for u in user_defs:
+        doc = await db.users.find_one({"email": u["email"]}, {"_id": 0})
+        if doc:
+            email_to_id[u["email"]] = doc["id"]
+    for u in user_defs:
+        mgr_id = email_to_id.get(u.get("manager")) if u.get("manager") else None
+        await db.users.update_one({"email": u["email"]},
+                                  {"$set": {"reporting_manager_id": mgr_id}})
+
+    # Assign Bilimora admin to branch
+    bilimora = branches.get("Bilimora")
+    admin_id = email_to_id.get("admin@dealer.com")
+    if bilimora and admin_id:
+        await db.branches.update_one({"id": bilimora["id"]},
+                                     {"$set": {"assigned_admin_id": admin_id}})
 
     # Seed default WA templates
     default_templates = [
