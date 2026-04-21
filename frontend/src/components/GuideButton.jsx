@@ -136,7 +136,8 @@ export default function GuideButton() {
     <>
       <button
         onClick={() => setRun(true)}
-        className="fixed z-40 right-4 bottom-24 md:bottom-6 w-12 h-12 rounded-full bg-brand text-white shadow-lg hover:bg-brand-dark active:scale-95 transition-all flex items-center justify-center"
+        className="fixed left-4 md:left-auto md:right-6 bottom-24 md:bottom-6 w-12 h-12 rounded-full bg-brand text-white shadow-lg hover:bg-brand-dark active:scale-95 transition-all flex items-center justify-center"
+        style={{ zIndex: 10001 }}
         aria-label="Help"
         data-testid="guide-btn"
       >

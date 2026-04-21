@@ -29,7 +29,7 @@ const Stat = ({ label, value, icon: Icon, tone = "dark", testid, linkTo }) => {
     <Card testid={testid} className="hover:border-zinc-300 transition-colors active:bg-zinc-50">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="overline truncate">{label}</div>
+          <div className="overline leading-tight" style={{ wordBreak: "break-word", whiteSpace: "normal" }}>{label}</div>
           <div className="font-mono text-xl sm:text-2xl md:text-3xl font-bold mt-1 sm:mt-2 tabular">{value}</div>
         </div>
         <div className={`w-8 h-8 sm:w-9 sm:h-9 ${toneBg} rounded-sm flex items-center justify-center flex-shrink-0`}>

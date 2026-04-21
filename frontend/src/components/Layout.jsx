@@ -184,9 +184,9 @@ export default function Layout({ children }) {
 
       {/* MOBILE BOTTOM NAV */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-zinc-200 flex items-stretch justify-around"
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200 flex items-stretch justify-around"
         data-testid="bottom-nav"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "env(safe-area-inset-bottom)", zIndex: 10000 }}
       >
         <BottomTab to="/dashboard" icon={LayoutDashboard} label={t("nav.home", "Home")} testid="bottom-nav-home" />
         <BottomTab to="/leads" icon={ListChecks} label={t("nav.leads")} testid="bottom-nav-leads" />
@@ -197,8 +197,8 @@ export default function Layout({ children }) {
       {/* FAB new lead */}
       <Link
         to="/leads/new"
-        className="md:hidden fixed right-4 z-30 rounded-full bg-brand text-white shadow-lg hover:bg-brand-dark active:scale-95 transition-all w-14 h-14 flex items-center justify-center"
-        style={{ bottom: "calc(72px + env(safe-area-inset-bottom))" }}
+        className="md:hidden fixed right-4 rounded-full bg-brand text-white shadow-lg hover:bg-brand-dark active:scale-95 transition-all w-14 h-14 flex items-center justify-center"
+        style={{ bottom: "calc(72px + env(safe-area-inset-bottom))", zIndex: 10001 }}
         data-testid="fab-new-lead"
         aria-label="New lead"
       >
