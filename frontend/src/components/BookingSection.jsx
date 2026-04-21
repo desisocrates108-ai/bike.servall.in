@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, formatApiErrorDetail } from "../api";
+import { api, API, formatApiErrorDetail } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import {
   Calendar, Plus, Ban, CheckCircle2, AlertTriangle, Car,
-  Hash, BadgeDollarSign,
+  Hash, BadgeDollarSign, Printer, Landmark,
 } from "lucide-react";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -59,7 +59,11 @@ export default function BookingSection({ lead, constants, onReload }) {
   const [editForm, setEditForm] = useState(null);
 
   const [payOpen, setPayOpen] = useState(false);
-  const [pay, setPay] = useState({ amount: "", date: today(), mode: "Cash", notes: "" });
+  const [pay, setPay] = useState({ amount: "", date: today(), mode: "Cash", payment_type: "Booking", notes: "" });
+  const [paySummary, setPaySummary] = useState(null);
+  const [financeCase, setFinanceCase] = useState(null);
+  const [showFinance, setShowFinance] = useState(false);
+  const [financeForm, setFinanceForm] = useState({ finance_company: "", downpayment_amount: "", emi: "", tenure: "" });
 
   const [allotOpen, setAllotOpen] = useState(false);
   const [allot, setAllot] = useState({ chassis_number: "", engine_number: "" });
@@ -69,15 +73,21 @@ export default function BookingSection({ lead, constants, onReload }) {
     const b = bRes.data;
     setBooking(b);
     if (b) {
-      const [pRes, aRes] = await Promise.all([
+      const [pRes, aRes, sRes, fRes] = await Promise.all([
         api.get(`/bookings/${b.id}/payments`),
         api.get(`/bookings/${b.id}/allotment`),
+        api.get(`/bookings/${b.id}/payment-summary`),
+        api.get(`/leads/${lead.id}/finance-case`),
       ]);
       setPayments(pRes.data);
       setAllotment(aRes.data);
+      setPaySummary(sRes.data);
+      setFinanceCase(fRes.data);
     } else {
       setPayments([]);
       setAllotment(null);
+      setPaySummary(null);
+      setFinanceCase(null);
     }
   };
 
@@ -156,7 +166,34 @@ export default function BookingSection({ lead, constants, onReload }) {
       await api.post(`/bookings/${booking.id}/payments`, payload);
       toast.success("Payment added");
       setPayOpen(false);
-      setPay({ amount: "", date: today(), mode: "Cash", notes: "" });
+      setPay({ amount: "", date: today(), mode: "Cash", payment_type: "Booking", notes: "" });
+      await loadAll();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+    }
+  };
+
+  const createFinanceCase = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = { ...financeForm };
+      ["downpayment_amount", "emi", "tenure"].forEach((k) => {
+        payload[k] = payload[k] === "" || payload[k] == null ? null : Number(payload[k]);
+      });
+      await api.post(`/leads/${lead.id}/finance-case`, payload);
+      toast.success("Finance case created");
+      setShowFinance(false);
+      setFinanceForm({ finance_company: "", downpayment_amount: "", emi: "", tenure: "" });
+      await loadAll();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+    }
+  };
+
+  const updateFinance = async (updates) => {
+    try {
+      await api.put(`/finance-cases/${financeCase.id}`, updates);
+      toast.success("Finance updated");
       await loadAll();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail));
@@ -268,6 +305,15 @@ export default function BookingSection({ lead, constants, onReload }) {
         title="Booking"
         right={
           <div className="flex items-center gap-2">
+            {booking.payment_status && (
+              <span className={`inline-block px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${
+                booking.payment_status === "Completed" ? "bg-emerald-100 text-emerald-700" :
+                booking.payment_status === "Partial" ? "bg-amber-100 text-amber-700" :
+                "bg-zinc-100 text-zinc-600"
+              }`} data-testid="payment-status-badge">
+                {booking.payment_status}
+              </span>
+            )}
             <span className={`inline-block px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${statusColor[booking.status]}`}>
               {booking.status}
             </span>
@@ -284,6 +330,15 @@ export default function BookingSection({ lead, constants, onReload }) {
           </div>
         }
       >
+        {paySummary?.margin_alert && (
+          <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded-sm text-sm flex items-start gap-2" data-testid="margin-alert">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <b>Margin money pending</b> — delivery in {paySummary.days_to_delivery} day(s).
+              Collect ₹{paySummary.pending_amount} before delivery.
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <Kv label="Final Deal Price" value={<span className="font-mono">₹{booking.final_deal_price}</span>} />
           <Kv label="Booking Amount" value={<span className="font-mono">₹{booking.booking_amount}</span>} />
@@ -398,6 +453,15 @@ export default function BookingSection({ lead, constants, onReload }) {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label className="overline">Type</Label>
+                  <Select value={pay.payment_type} onValueChange={(v) => setPay({ ...pay, payment_type: v })}>
+                    <SelectTrigger className="mt-2" data-testid="pay-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {constants?.payment_types?.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="col-span-2">
                   <Label className="overline">Notes</Label>
                   <Input value={pay.notes} onChange={(e) => setPay({ ...pay, notes: e.target.value })} className="mt-2" />
@@ -417,20 +481,37 @@ export default function BookingSection({ lead, constants, onReload }) {
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Type</th>
                 <th>Amount</th>
                 <th>Mode</th>
                 <th>Notes</th>
                 <th>By</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id} data-testid={`payment-${p.id}`}>
                   <td className="font-mono text-sm">{p.date}</td>
+                  <td>
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-zinc-100 text-zinc-700">
+                      {p.payment_type || "Booking"}
+                    </span>
+                  </td>
                   <td className="font-mono font-bold text-emerald-700">₹{p.amount}</td>
                   <td>{p.mode}</td>
                   <td className="text-zinc-600">{p.notes || "—"}</td>
                   <td className="text-zinc-500 text-xs">{p.created_by_name}</td>
+                  <td>
+                    <a
+                      href={`${API}/payments/${p.id}/receipt?auth=${encodeURIComponent(localStorage.getItem("access_token") || "")}`}
+                      target="_blank" rel="noreferrer"
+                      className="text-zinc-500 hover:text-zinc-900"
+                      data-testid={`receipt-${p.id}`}
+                    >
+                      <Printer className="w-4 h-4" />
+                    </a>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -492,6 +573,123 @@ export default function BookingSection({ lead, constants, onReload }) {
           </div>
         ) : (
           <div className="text-sm text-zinc-400">No vehicle assigned yet.</div>
+        )}
+      </Card>
+
+      {paySummary && (
+        <Card title="Payment breakdown">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <Kv label="Final Price" value={<span className="font-mono">₹{paySummary.final_deal_price}</span>} />
+            <Kv label="Exchange Off" value={<span className="font-mono text-emerald-700">−₹{paySummary.exchange_adjustment || 0}</span>} />
+            <Kv label="Net Payable" value={<span className="font-mono font-bold">₹{paySummary.net_payable}</span>} />
+            <Kv label="Pending" value={<span className={`font-mono font-bold ${paySummary.pending_amount > 0 ? "text-rose-700" : "text-emerald-700"}`}>₹{paySummary.pending_amount}</span>} />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {Object.entries(paySummary.by_type || {}).map(([t, v]) => (
+              <div key={t} className="border border-zinc-200 rounded-sm px-3 py-2 flex items-center justify-between">
+                <span className="overline">{t}</span>
+                <span className="font-mono font-semibold">₹{v}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card
+        title="Finance Case"
+        right={
+          !financeCase && (
+            <Button size="sm" onClick={() => setShowFinance(!showFinance)} variant="outline" className="rounded-sm" data-testid="start-finance-btn">
+              <Landmark className="w-4 h-4 mr-1" /> Start finance case
+            </Button>
+          )
+        }
+      >
+        {!financeCase && !showFinance && (
+          <div className="text-sm text-zinc-400">No finance case opened. Use Start to record KYC/loan details.</div>
+        )}
+        {!financeCase && showFinance && (
+          <form onSubmit={createFinanceCase} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label className="overline">Finance Company *</Label>
+              <Input required value={financeForm.finance_company} onChange={(e) => setFinanceForm({ ...financeForm, finance_company: e.target.value })} className="mt-2" data-testid="fc-company" />
+            </div>
+            <div>
+              <Label className="overline">Down Payment</Label>
+              <Input type="number" value={financeForm.downpayment_amount} onChange={(e) => setFinanceForm({ ...financeForm, downpayment_amount: e.target.value })} className="mt-2" data-testid="fc-down" />
+            </div>
+            <div>
+              <Label className="overline">EMI</Label>
+              <Input type="number" value={financeForm.emi} onChange={(e) => setFinanceForm({ ...financeForm, emi: e.target.value })} className="mt-2" />
+            </div>
+            <div>
+              <Label className="overline">Tenure (months)</Label>
+              <Input type="number" value={financeForm.tenure} onChange={(e) => setFinanceForm({ ...financeForm, tenure: e.target.value })} className="mt-2" />
+            </div>
+            <div className="md:col-span-2 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowFinance(false)}>Cancel</Button>
+              <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 rounded-sm" data-testid="fc-submit-btn">Create Finance Case</Button>
+            </div>
+          </form>
+        )}
+        {financeCase && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <Kv label="Company" value={financeCase.finance_company} />
+              <Kv label="Loan Amount" value={financeCase.loan_amount != null ? <span className="font-mono">₹{financeCase.loan_amount}</span> : "—"} />
+              <Kv label="Downpayment" value={financeCase.downpayment_amount != null ? <span className="font-mono">₹{financeCase.downpayment_amount}</span> : "—"} />
+              <Kv label="EMI × Tenure" value={<span className="font-mono">{financeCase.emi || "—"} × {financeCase.tenure || "—"}</span>} />
+            </div>
+            <div className="flex items-center flex-wrap gap-2 mb-3">
+              {constants?.finance_statuses?.map((s) => (
+                <span
+                  key={s}
+                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-sm ${
+                    financeCase.status === s
+                      ? (s === "Approved" ? "bg-emerald-600 text-white" :
+                         s === "Rejected" ? "bg-rose-600 text-white" :
+                         "bg-zinc-900 text-white")
+                      : "bg-zinc-100 text-zinc-500"
+                  }`}
+                  data-testid={`fc-status-${s.replace(/ /g, "-")}`}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+            {financeCase.rejection_reason && (
+              <div className="text-sm text-rose-700 mb-3">Rejection: {financeCase.rejection_reason}</div>
+            )}
+            <div className="flex gap-2 flex-wrap">
+              {financeCase.status !== "Under Review" && financeCase.status !== "Approved" && financeCase.status !== "Rejected" && (
+                <Button size="sm" variant="outline" onClick={() => updateFinance({ status: "Under Review" })} data-testid="fc-review-btn">
+                  Mark under review
+                </Button>
+              )}
+              {isManager && financeCase.status !== "Approved" && (
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 rounded-sm" onClick={() => updateFinance({ status: "Approved" })} data-testid="fc-approve-btn">
+                  Approve
+                </Button>
+              )}
+              {isManager && financeCase.status !== "Rejected" && (
+                <Button size="sm" variant="outline" className="rounded-sm border-rose-200 text-rose-700" onClick={() => {
+                  const reason = window.prompt("Rejection reason?");
+                  if (reason) updateFinance({ status: "Rejected", rejection_reason: reason });
+                }} data-testid="fc-reject-btn">
+                  Reject
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-sm"
+                onClick={() => updateFinance({ downpayment_received: !financeCase.downpayment_received })}
+                data-testid="fc-downpayment-toggle"
+              >
+                {financeCase.downpayment_received ? "✓ Downpayment received" : "Mark downpayment received"}
+              </Button>
+            </div>
+          </>
         )}
       </Card>
     </>

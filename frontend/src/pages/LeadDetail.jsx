@@ -355,6 +355,9 @@ export default function LeadDetail() {
           <TabsTrigger value="followups" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-followups">Follow-ups ({followups.length})</TabsTrigger>
           <TabsTrigger value="deal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-deal">Deal</TabsTrigger>
           <TabsTrigger value="booking" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-booking">Booking</TabsTrigger>
+          {lead.purchase_type === "Exchange Vehicle" && (
+            <TabsTrigger value="exchange" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-exchange">Exchange</TabsTrigger>
+          )}
           <TabsTrigger value="delivery" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-delivery">Delivery</TabsTrigger>
           <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-documents">Documents ({(lead.documents || []).length})</TabsTrigger>
           <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-timeline">Timeline</TabsTrigger>
@@ -725,6 +728,10 @@ export default function LeadDetail() {
 
         <TabsContent value="booking" className="pt-6">
           <BookingSection lead={lead} constants={constants} onReload={reload} />
+        </TabsContent>
+
+        <TabsContent value="exchange" className="pt-6">
+          <ExchangeSection lead={lead} constants={constants} onReload={reload} />
         </TabsContent>
 
         <TabsContent value="delivery" className="pt-6">

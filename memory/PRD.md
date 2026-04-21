@@ -33,44 +33,37 @@ Build a web-based CRM for a multi-branch two-wheeler dealership with lead-source
 10. Role-based data access enforced on every endpoint
 
 ## What's Been Implemented (2026-02-20)
-### Backend (iter 1: 43, iter 2: +14, iter 3: +18 — all passing)
-- JWT auth with cookies + Bearer header fallback
-- Master data CRUD (branches, brands, models, variants, colors) — super_admin
-- Leads CRUD with round-robin auto-assignment, RBAC, stage validation
-- **Module 3 — Follow-up & Call Tracking** (call_status, customer_response, outcome_tag, temperature, duration, loss_reason; mandatory notes+date; 60s anti-spam; at-risk flag after 2+ missed)
-  - `/api/tasks?kind=today|missed|upcoming|at_risk`
-  - `/api/analytics/performance` (per-exec metrics)
-- **Module 4 — Deal & Negotiation** (ex-showroom, final_deal_price, auto approval-required at ₹5000 threshold, request-approval / approve / reject; full negotiation history)
-  - Stricter stage rules: Deal → 1+ Connected call; Booking → final_deal_price + approval
-  - `/api/analytics/deals`
-- **Module 5 — Booking Management**
-  - Bookings collection (one active per lead)
-  - Multi-entry payments sub-collection with auto total_paid / pending_amount
-  - Business rules: booking_amount ≤ final_deal_price, delivery ≥ booking_date, confirm needs paid ≥ booking_amount
-  - `POST /api/leads/{id}/booking`, `PUT /api/bookings/{id}`, `/confirm`, `/cancel` (admin)
-  - `POST /api/bookings/{id}/payments`, `GET /api/bookings/{id}/payments`
-  - Auto-advances lead.stage → Booking on creation
-- **Module 6 — Vehicle Allotment**
-  - Allotments collection (unique chassis_number system-wide, one per booking)
-  - Requires booking.status='Confirmed'
-  - `POST /api/bookings/{id}/allotment`, `PUT /api/allotments/{id}` (admin)
-  - Auto-advances lead.stage → Delivery on allotment
-- File upload via Emergent Object Storage
-- Idempotent seed on startup
+### Backend (cumulative 151/151 tests passing across iters 1-5)
+- JWT auth + RBAC (sales_executive / admin / super_admin)
+- Master data CRUD; Leads CRUD with round-robin, stage validation
+- **Module 3** — Follow-up & Call Tracking (7-field follow-up, 60s anti-spam, at-risk flag, tasks, performance analytics)
+- **Module 4** — Deal & Negotiation (ex-showroom, final price, ₹5000 approval threshold, negotiation history)
+- **Module 5** — Booking Management (multi-entry payments, confirm/cancel, auto-advance)
+- **Module 6** — Vehicle Allotment (unique chassis, auto-advance Delivery)
+- **Module 7** — Documents + Gemini OCR (14 types, version control, verify/reject, masking, duplicate detection)
+- **Module 8** — Delivery Management (checklist, accessories, OTP, printable challan, WhatsApp log-only pipeline)
+- **Module 9** — Payment & Finance System
+  - `payment_type` (Booking/Margin/Final/Other) on every payment
+  - Auto-computed `payment_status` (Pending/Partial/Completed) on booking
+  - `net_payable` = final_deal_price − exchange.final_value
+  - `/bookings/{id}/payment-summary` with by-type breakdown + margin-alert when delivery ≤ 3 days away with no Margin payment
+  - `/payments/{id}/receipt` — printable HTML receipt
+  - Finance Cases (unique per lead) with status flow Not Applied → Applied → Under Review → Approved/Rejected
+  - Auto-compute `loan_amount` = final_price − downpayment
+  - Approve/Reject restricted to admin/super_admin; reject requires reason
+  - Downpayment-received toggle
+  - Delivery /complete now allows finance path: **pending>0 OK if finance Approved + downpayment received**
+- **Module 10** — Exchange Vehicle System
+  - Extended ExchangeInfo (old_model, self_start, finance_on_rc, expected/offered/final/broker values, notes)
+  - `/leads/{id}/exchange-valuations` — broker/internal/online valuation history
+  - `/leads/{id}/exchange-photos` — multi-photo upload to Emergent Object Storage
+  - Auto-adjusts booking payable on exchange.final_value change
+  - Visible in UI only when `purchase_type='Exchange Vehicle'`
 
 ### Frontend
-- Login page (split-screen) with quick demo logins
-- Dashboard: stat cards + conversion %, missed/upcoming/at-risk (linked to Tasks), deals-in-progress, pending approvals, avg discount, top-execs leaderboard
-- Leads list with full filter bar
-- Lead creation form (section-based, conditional)
-- Lead detail page with tabs:
-  - Overview / Follow-ups / Deal / **Booking** / Documents / Timeline
-  - Enhanced follow-up form
-  - Deal tab: editable pricing, auto-discount calc, approval flow, negotiation history
-  - **Booking tab:** create/edit booking form, payments table with add-payment dialog, vehicle allotment (chassis + engine) sub-section with confirm / cancel / assign-vehicle actions
-- Sales Funnel kanban
-- Tasks page (Today / Missed / Upcoming / At-Risk)
-- User management, Master Data management
+- Login + Dashboard + Leads list + Lead form
+- Lead detail page tabs: Overview / Follow-ups / Deal / **Booking** (with payment_type selector, receipt print button, payment-breakdown card, finance-case card with status stepper + approve/reject + downpayment toggle, margin alert) / **Exchange** (conditional tab with inspection form, pricing, valuation history, photos) / Delivery / Documents / Timeline
+- Funnel kanban, Tasks page, User management, Master Data management
 
 ## Seeded Credentials
 - Super Admin: `superadmin@dealer.com` / `super123`

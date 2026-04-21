@@ -77,6 +77,11 @@ DOC_STATUSES = ["Pending", "Verified", "Rejected"]
 DELIVERY_STATUSES = ["Scheduled", "Ready", "Delivered", "Cancelled"]
 DEFAULT_ACCESSORIES = ["Helmet", "Ceramic Coating", "Mud Flaps",
                        "Side Guard", "Mobile Holder", "Other"]
+PAYMENT_TYPES = ["Booking", "Margin", "Final", "Other"]
+PAYMENT_STATUSES = ["Pending", "Partial", "Completed"]
+FINANCE_STATUSES = ["Not Applied", "Applied", "Under Review", "Approved", "Rejected"]
+EXCHANGE_CONDITIONS = ["Good", "Average", "Poor"]
+MARGIN_ALERT_DAYS = 3  # show "margin due before X days of delivery"
 DOC_REQUIREMENTS = {
     "Booking": ["Aadhaar Card"],
     "Finance": ["Aadhaar Card", "PAN Card", "Bank Statement"],
@@ -213,14 +218,22 @@ class ColorIn(BaseModel):
 
 
 class ExchangeInfo(BaseModel):
+    old_model: Optional[str] = None
     registration_number: Optional[str] = None
     model_year: Optional[int] = None
     tyre_condition: Optional[str] = None
     battery_condition: Optional[str] = None
     body_condition: Optional[str] = None
+    self_start: Optional[bool] = None
+    finance_on_rc: Optional[bool] = None
     expected_price: Optional[float] = None
+    offered_price: Optional[float] = None
+    final_value: Optional[float] = None
+    broker_value: Optional[float] = None
+    broker_remarks: Optional[str] = None
     photos: List[str] = []
     rc_url: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class DealInfo(BaseModel):
@@ -362,7 +375,34 @@ class PaymentIn(BaseModel):
     amount: float
     date: Optional[str] = None  # YYYY-MM-DD
     mode: str  # Cash/UPI/Bank Transfer/Finance/Cheque
+    payment_type: Optional[str] = "Booking"  # Booking/Margin/Final/Other
     notes: Optional[str] = None
+
+
+class FinanceCaseIn(BaseModel):
+    finance_company: str
+    downpayment_amount: Optional[float] = None
+    emi: Optional[float] = None
+    tenure: Optional[int] = None
+    assigned_to: Optional[str] = None
+
+
+class FinanceCaseUpdate(BaseModel):
+    finance_company: Optional[str] = None
+    downpayment_amount: Optional[float] = None
+    emi: Optional[float] = None
+    tenure: Optional[int] = None
+    assigned_to: Optional[str] = None
+    status: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    eligibility_notes: Optional[str] = None
+    downpayment_received: Optional[bool] = None
+
+
+class ExchangeValuationIn(BaseModel):
+    source: str  # "broker" / "internal" / "online"
+    value: float
+    remarks: Optional[str] = None
 
 
 class AllotmentIn(BaseModel):
@@ -871,6 +911,11 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
     if updates:
         updates["updated_at"] = now_iso()
         await db.leads.update_one({"id": lid}, {"$set": updates})
+        # If exchange.final_value changed, recompute any active booking
+        if "exchange" in updates:
+            active_b = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}}, {"_id": 0})
+            if active_b:
+                await _recompute_booking(active_b)
         await add_timeline(lid, "Lead Updated", user, {"fields": list(updates.keys())})
         if "assigned_to" in updates:
             await add_timeline(lid, "Lead Assigned", user, {"assigned_to": updates["assigned_to"]})
@@ -1347,12 +1392,24 @@ async def _booking_payment_totals(booking_id: str):
 async def _recompute_booking(booking: dict):
     bid = booking["id"]
     paid = await _booking_payment_totals(bid)
-    pending = float(booking.get("final_deal_price") or 0) - paid
+    final_price = float(booking.get("final_deal_price") or 0)
+    # Subtract exchange final value from payable
+    lead = await db.leads.find_one({"id": booking.get("lead_id")}, {"_id": 0}) if booking.get("lead_id") else None
+    exchange_value = float(((lead or {}).get("exchange") or {}).get("final_value") or 0) if lead else 0
+    net_payable = max(0.0, final_price - exchange_value)
+    pending = net_payable - paid
+    status = "Pending" if paid <= 0 else ("Completed" if pending <= 0.01 else "Partial")
     await db.bookings.update_one({"id": bid},
-                                 {"$set": {"total_paid": paid, "pending_amount": pending,
+                                 {"$set": {"total_paid": paid, "pending_amount": round(pending, 2),
+                                           "net_payable": net_payable,
+                                           "exchange_adjustment": exchange_value,
+                                           "payment_status": status,
                                            "updated_at": now_iso()}})
     booking["total_paid"] = paid
-    booking["pending_amount"] = pending
+    booking["pending_amount"] = round(pending, 2)
+    booking["net_payable"] = net_payable
+    booking["exchange_adjustment"] = exchange_value
+    booking["payment_status"] = status
     return booking
 
 
@@ -1402,6 +1459,7 @@ async def create_booking(lid: str, body: BookingIn, user: dict = Depends(get_cur
         "booking_amount": float(body.booking_amount),
         "total_paid": 0.0,
         "pending_amount": float(final_price),
+        "payment_status": "Pending",
         "status": "Pending",
         "finance_company": body.finance_company,
         "down_payment": body.down_payment,
@@ -1542,6 +1600,8 @@ async def add_payment(bid: str, body: PaymentIn, user: dict = Depends(get_curren
         raise HTTPException(400, "Amount must be positive")
     if body.mode not in PAYMENT_MODES:
         raise HTTPException(400, "Invalid payment mode")
+    if body.payment_type and body.payment_type not in PAYMENT_TYPES:
+        raise HTTPException(400, "Invalid payment type")
 
     # Check does not exceed final
     current_paid = await _booking_payment_totals(bid)
@@ -1556,6 +1616,7 @@ async def add_payment(bid: str, body: PaymentIn, user: dict = Depends(get_curren
         "amount": float(body.amount),
         "date": body.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "mode": body.mode,
+        "payment_type": body.payment_type or "Booking",
         "notes": body.notes,
         "created_by": user["id"],
         "created_by_name": user["name"],
@@ -1581,6 +1642,280 @@ async def list_payments(bid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(403, "Access denied")
     items = await db.payments.find({"booking_id": bid}, {"_id": 0}).sort("date", -1).to_list(500)
     return items
+
+
+@api.get("/bookings/{bid}/payment-summary")
+async def payment_summary(bid: str, user: dict = Depends(get_current_user)):
+    booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    lead = await db.leads.find_one({"id": booking["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    by_type = {k: 0.0 for k in PAYMENT_TYPES}
+    async for p in db.payments.find({"booking_id": bid}, {"_id": 0, "amount": 1, "payment_type": 1}):
+        t = p.get("payment_type") or "Booking"
+        by_type[t] = by_type.get(t, 0.0) + float(p.get("amount") or 0)
+
+    total_paid = sum(by_type.values())
+    final_price = float(booking.get("final_deal_price") or 0)
+    exchange_value = float(booking.get("exchange_adjustment") or 0)
+    net_payable = max(0.0, final_price - exchange_value)
+    pending = max(0.0, net_payable - total_paid)
+
+    # Margin alert
+    margin_alert = False
+    days_to_delivery = None
+    delivery = await db.deliveries.find_one({"lead_id": lead["id"], "status": {"$ne": "Cancelled"}}, {"_id": 0})
+    if delivery and delivery.get("delivery_date"):
+        try:
+            ddate = datetime.strptime(delivery["delivery_date"], "%Y-%m-%d").date()
+            today_d = datetime.now(timezone.utc).date()
+            days_to_delivery = (ddate - today_d).days
+            if 0 <= days_to_delivery <= MARGIN_ALERT_DAYS and by_type.get("Margin", 0) == 0 and pending > 0:
+                margin_alert = True
+        except Exception:
+            pass
+
+    return {
+        "final_deal_price": final_price,
+        "exchange_adjustment": exchange_value,
+        "net_payable": net_payable,
+        "total_paid": total_paid,
+        "pending_amount": round(pending, 2),
+        "by_type": by_type,
+        "payment_status": booking.get("payment_status"),
+        "margin_alert": margin_alert,
+        "days_to_delivery": days_to_delivery,
+    }
+
+
+@api.get("/payments/{pid}/receipt", response_class=FastResponse)
+async def payment_receipt(pid: str, request: Request,
+                          authorization: Optional[str] = Header(None),
+                          auth: Optional[str] = Query(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    elif auth:
+        token = auth
+    else:
+        token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except Exception:
+        raise HTTPException(401, "Invalid token")
+
+    payment = await db.payments.find_one({"id": pid}, {"_id": 0})
+    if not payment:
+        raise HTTPException(404, "Payment not found")
+    booking = await db.bookings.find_one({"id": payment["booking_id"]}, {"_id": 0}) if payment.get("booking_id") else None
+    lead = await db.leads.find_one({"id": payment["lead_id"]}, {"_id": 0}) if payment.get("lead_id") else None
+    branch = await db.branches.find_one({"id": (lead or {}).get("branch_id")}, {"_id": 0}) if lead else None
+    brand = await db.brands.find_one({"id": (lead or {}).get("brand_id")}, {"_id": 0}) if lead else None
+    model = await db.vehicle_models.find_one({"id": (lead or {}).get("model_id")}, {"_id": 0}) if lead else None
+
+    html = f"""<!doctype html><html><head><meta charset="utf-8"><title>Payment Receipt</title>
+<style>
+  body {{ font-family: 'IBM Plex Sans', Arial, sans-serif; color: #09090b; padding: 40px; max-width: 640px; margin: auto; }}
+  .overline {{ font-size: 10px; letter-spacing: 0.2em; color: #52525b; font-weight: 700; text-transform: uppercase; }}
+  h1 {{ font-size: 22px; margin: 2px 0 0; letter-spacing: -0.02em; }}
+  .row {{ display: flex; justify-content: space-between; border-bottom: 1px dashed #e4e4e7; padding: 8px 0; font-size: 14px; }}
+  .total {{ background: #09090b; color: #fff; padding: 14px; margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 20px; text-align: center; }}
+  .muted {{ color: #52525b; font-size: 12px; }}
+  @media print {{ .noprint {{ display: none }} body {{ padding: 0 }} }}
+</style></head><body>
+<div class="noprint" style="text-align:right;margin-bottom:16px"><button onclick="window.print()">Print</button></div>
+<div style="border-bottom:2px solid #09090b;padding-bottom:10px;margin-bottom:16px">
+  <div class="overline">Torque Dealership CRM</div>
+  <h1>Payment Receipt</h1>
+  <div class="muted">#{pid[:8].upper()} · Branch: {(branch or {}).get('name','—')}</div>
+</div>
+<div class="row"><span class="muted">Customer</span><b>{(lead or {}).get('customer_name','—')}</b></div>
+<div class="row"><span class="muted">Phone</span><span>{(lead or {}).get('phone','—')}</span></div>
+<div class="row"><span class="muted">Vehicle</span><span>{(brand or {}).get('name','')} {(model or {}).get('name','')}</span></div>
+<div class="row"><span class="muted">Date</span><span>{payment['date']}</span></div>
+<div class="row"><span class="muted">Payment Type</span><b>{payment.get('payment_type','Booking')}</b></div>
+<div class="row"><span class="muted">Mode</span><span>{payment['mode']}</span></div>
+<div class="row"><span class="muted">Received By</span><span>{payment.get('created_by_name','—')}</span></div>
+{'<div class="row"><span class="muted">Notes</span><span>' + (payment.get('notes') or '') + '</span></div>' if payment.get('notes') else ''}
+<div class="total">₹ {payment['amount']:,.2f}</div>
+<div style="margin-top:16px" class="muted">Total paid so far: ₹{(booking or {}).get('total_paid', 0):,.2f} · Pending: ₹{(booking or {}).get('pending_amount', 0):,.2f}</div>
+<div style="margin-top:40px;text-align:center;color:#a1a1aa;font-size:11px">Computer-generated receipt · No signature required</div>
+</body></html>"""
+    return FastResponse(content=html, media_type="text/html")
+
+
+# ============================================================
+# Module 9 — Finance Case
+# ============================================================
+
+@api.post("/leads/{lid}/finance-case")
+async def create_finance_case(lid: str, body: FinanceCaseIn, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    existing = await db.finance_cases.find_one({"lead_id": lid}, {"_id": 0})
+    if existing:
+        raise HTTPException(400, "Finance case already exists; use PUT to update")
+    final_price = float(((lead.get("deal") or {}).get("final_deal_price")) or 0)
+    dp = float(body.downpayment_amount or 0)
+    loan_amount = max(0.0, final_price - dp) if final_price else None
+
+    fid = str(uuid.uuid4())
+    doc = {
+        "id": fid, "lead_id": lid,
+        "branch_id": lead.get("branch_id"),
+        "finance_company": body.finance_company,
+        "downpayment_amount": dp,
+        "loan_amount": loan_amount,
+        "emi": body.emi, "tenure": body.tenure,
+        "assigned_to": body.assigned_to,
+        "status": "Applied",
+        "applied_at": now_iso(),
+        "approved_at": None, "rejection_reason": None,
+        "eligibility_notes": None,
+        "downpayment_received": False,
+        "created_by": user["id"], "created_by_name": user["name"],
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.finance_cases.insert_one(doc)
+    doc.pop("_id", None)
+    await add_timeline(lid, "Finance Case Created", user,
+                       {"finance_company": body.finance_company, "loan_amount": loan_amount})
+    return doc
+
+
+@api.get("/leads/{lid}/finance-case")
+async def get_finance_case(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    return await db.finance_cases.find_one({"lead_id": lid}, {"_id": 0})
+
+
+@api.put("/finance-cases/{fid}")
+async def update_finance_case(fid: str, body: FinanceCaseUpdate, user: dict = Depends(get_current_user)):
+    fc = await db.finance_cases.find_one({"id": fid}, {"_id": 0})
+    if not fc:
+        raise HTTPException(404, "Finance case not found")
+    lead = await db.leads.find_one({"id": fc["lead_id"]}, {"_id": 0})
+    if not lead or not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+
+    if "status" in updates:
+        if updates["status"] not in FINANCE_STATUSES:
+            raise HTTPException(400, "Invalid finance status")
+        # Only admin/super_admin can approve or reject
+        if updates["status"] in ("Approved", "Rejected") and user["role"] not in ("admin", "super_admin"):
+            raise HTTPException(403, "Only admin can approve or reject finance")
+        if updates["status"] == "Approved":
+            updates["approved_at"] = now_iso()
+            updates["approved_by"] = user["id"]
+            updates["approved_by_name"] = user["name"]
+        if updates["status"] == "Rejected" and not (updates.get("rejection_reason") or fc.get("rejection_reason")):
+            raise HTTPException(400, "Rejection reason required")
+
+    # Recompute loan amount if downpayment changes
+    final_price = float(((lead.get("deal") or {}).get("final_deal_price")) or 0)
+    if "downpayment_amount" in updates and final_price:
+        updates["loan_amount"] = max(0.0, final_price - float(updates["downpayment_amount"]))
+
+    if updates:
+        updates["updated_at"] = now_iso()
+        await db.finance_cases.update_one({"id": fid}, {"$set": updates})
+        if "status" in updates:
+            await add_timeline(fc["lead_id"], f"Finance {updates['status']}", user,
+                               {"finance_company": fc.get("finance_company")})
+    fresh = await db.finance_cases.find_one({"id": fid}, {"_id": 0})
+    return fresh
+
+
+# ============================================================
+# Module 10 — Exchange Valuation History
+# ============================================================
+
+@api.post("/leads/{lid}/exchange-valuations")
+async def add_exchange_valuation(lid: str, body: ExchangeValuationIn,
+                                 user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    if lead.get("purchase_type") != "Exchange Vehicle":
+        raise HTTPException(400, "Lead is not an exchange case")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "lead_id": lid,
+        "source": body.source,
+        "value": float(body.value),
+        "remarks": body.remarks,
+        "created_by": user["id"], "created_by_name": user["name"],
+        "created_at": now_iso(),
+    }
+    await db.exchange_valuations.insert_one(doc)
+    doc.pop("_id", None)
+    # Store broker_value on lead exchange for quick display if source is broker
+    if body.source == "broker":
+        exch = lead.get("exchange") or {}
+        exch["broker_value"] = float(body.value)
+        exch["broker_remarks"] = body.remarks
+        await db.leads.update_one({"id": lid}, {"$set": {"exchange": exch, "updated_at": now_iso()}})
+    await add_timeline(lid, "Exchange Valuation Added", user,
+                       {"source": body.source, "value": body.value})
+    return doc
+
+
+@api.get("/leads/{lid}/exchange-valuations")
+async def list_exchange_valuations(lid: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    return await db.exchange_valuations.find({"lead_id": lid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api.post("/leads/{lid}/exchange-photos")
+async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
+                                user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    ext = (file.filename or "bin").split(".")[-1].lower() if "." in (file.filename or "") else "bin"
+    path = f"{APP_NAME}/leads/{lid}/exchange/{uuid.uuid4()}.{ext}"
+    data = await file.read()
+    result = put_object(path, data, file.content_type or "application/octet-stream")
+    file_id = str(uuid.uuid4())
+    frec = {
+        "id": file_id, "lead_id": lid,
+        "storage_path": result["path"],
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+        "size": result.get("size"),
+        "doc_type": "Exchange Photo", "side": "exchange",
+        "uploaded_by": user["id"], "uploaded_by_name": user["name"],
+        "is_deleted": False, "created_at": now_iso(),
+    }
+    await db.files.insert_one(frec)
+    exch = lead.get("exchange") or {}
+    photos = exch.get("photos") or []
+    photos.append(file_id)
+    exch["photos"] = photos
+    await db.leads.update_one({"id": lid}, {"$set": {"exchange": exch, "updated_at": now_iso()}})
+    frec.pop("_id", None)
+    return {"file_id": file_id, "photos": photos}
+
 
 
 # ============================================================
@@ -2142,10 +2477,13 @@ async def complete_delivery(did: str, user: dict = Depends(get_current_user)):
     if not lead or not await can_access_lead(user, lead):
         raise HTTPException(403, "Access denied")
 
-    # Payment completeness
+    # Payment completeness — allow if payment completed OR finance approved + downpayment received
     booking = await db.bookings.find_one({"id": delivery.get("booking_id")}, {"_id": 0}) if delivery.get("booking_id") else None
-    if booking and float(booking.get("pending_amount") or 0) > 0:
-        raise HTTPException(400, f"Pending amount ₹{booking['pending_amount']} must be cleared before delivery")
+    if booking and float(booking.get("pending_amount") or 0) > 0.01:
+        fc = await db.finance_cases.find_one({"lead_id": lead["id"]}, {"_id": 0})
+        finance_ok = bool(fc and fc.get("status") == "Approved" and fc.get("downpayment_received"))
+        if not finance_ok:
+            raise HTTPException(400, f"Pending amount ₹{booking['pending_amount']} must be cleared (or finance approved + downpayment received) before delivery")
 
     checklist = delivery.get("checklist") or {}
     if not all([checklist.get("payment_completed"), checklist.get("documents_verified"),
@@ -2337,6 +2675,8 @@ async def seed_data():
     await db.documents.create_index([("doc_type", 1), ("doc_number", 1)])
     await db.deliveries.create_index("lead_id")
     await db.whatsapp_logs.create_index("lead_id")
+    await db.finance_cases.create_index("lead_id", unique=True)
+    await db.exchange_valuations.create_index("lead_id")
 
     # Branches
     branch_defs = [
@@ -2550,6 +2890,10 @@ async def get_constants():
         "doc_requirements": DOC_REQUIREMENTS,
         "delivery_statuses": DELIVERY_STATUSES,
         "default_accessories": DEFAULT_ACCESSORIES,
+        "payment_types": PAYMENT_TYPES,
+        "payment_statuses": PAYMENT_STATUSES,
+        "finance_statuses": FINANCE_STATUSES,
+        "exchange_conditions": EXCHANGE_CONDITIONS,
         "roles": ROLES,
         "config": {
             "discount_approval_threshold": DISCOUNT_APPROVAL_THRESHOLD,
