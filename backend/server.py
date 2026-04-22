@@ -1353,6 +1353,11 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
     if "assigned_to" in updates and user["role"] == "sales_executive":
         del updates["assigned_to"]
 
+    # Conditional cleanup — if switching Exchange → New Purchase, wipe exchange docs/photos
+    # (Keep identity_docs intact since Aadhaar is common to both.)
+    if updates.get("purchase_type") == "New Purchase" and (lead.get("purchase_type") or "") == "Exchange Vehicle":
+        updates["exchange"] = None
+
     # Negotiation history: log if deal fields changed
     if "deal" in updates:
         old_deal = lead.get("deal") or {}
@@ -1461,6 +1466,31 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
         raise HTTPException(400, "Invalid stage")
 
     # --- STRICT FORM-BASED FUNNEL VALIDATION ---
+    # Identity / Ownership document gating — required for ANY forward stage past Inquiry
+    # (Allows Inquiry ↔ Inquiry and any → Lost without docs)
+    if body.stage not in ("Inquiry", "Lost"):
+        identity = lead.get("identity_docs") or {}
+        missing_id = []
+        if not (identity.get("aadhaar") or []):
+            missing_id.append("Aadhaar Front")
+        if not (identity.get("aadhaar_back") or []):
+            missing_id.append("Aadhaar Back")
+        if missing_id:
+            raise HTTPException(400, f"Upload required KYC documents before advancing: {', '.join(missing_id)}")
+        if (lead.get("purchase_type") or "") == "Exchange Vehicle":
+            exch_docs = (lead.get("exchange") or {}).get("documents") or {}
+            missing_ex = []
+            if not (exch_docs.get("rc_front") or []):
+                missing_ex.append("RC Front")
+            if not (exch_docs.get("rc_back") or []):
+                missing_ex.append("RC Back")
+            if not (exch_docs.get("front_photo") or []):
+                missing_ex.append("Vehicle Front Photo")
+            if not (exch_docs.get("back_photo") or []):
+                missing_ex.append("Vehicle Back Photo")
+            if missing_ex:
+                raise HTTPException(400, f"Exchange Vehicle requires: {', '.join(missing_ex)} before advancing")
+
     # Inquiry → Follow-up: Name + Phone + Vehicle (brand OR model) required
     deal = lead.get("deal") or {}
     if body.stage == "Follow-up":
@@ -2579,6 +2609,11 @@ async def list_exchange_valuations(lid: str, user: dict = Depends(get_current_us
     return await db.exchange_valuations.find({"lead_id": lid}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
 
+IDENTITY_DOC_TYPES = {"aadhaar", "aadhaar_back", "other"}
+EXCHANGE_DOC_TYPES = {"rc_front", "rc_back", "rc_pdf", "front_photo", "back_photo", "rc_book"}
+LEGACY_PHOTO_TYPE = "photo"
+
+
 @api.post("/leads/{lid}/exchange-photos")
 async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
                                 doc_type: str = "photo",
@@ -2588,13 +2623,12 @@ async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
         raise HTTPException(404, "Lead not found")
     if not await can_access_lead(user, lead):
         raise HTTPException(403, "Access denied")
-    # doc_type controls which bucket to store file id under
-    allowed_types = {"photo", "aadhaar", "aadhaar_back", "rc_book", "front_photo", "back_photo", "other"}
     dt = (doc_type or "photo").lower()
-    if dt not in allowed_types:
-        dt = "photo"
+    all_allowed = IDENTITY_DOC_TYPES | EXCHANGE_DOC_TYPES | {LEGACY_PHOTO_TYPE}
+    if dt not in all_allowed:
+        dt = LEGACY_PHOTO_TYPE
     ext = (file.filename or "bin").split(".")[-1].lower() if "." in (file.filename or "") else "bin"
-    path = f"{APP_NAME}/leads/{lid}/exchange/{dt}/{uuid.uuid4()}.{ext}"
+    path = f"{APP_NAME}/leads/{lid}/docs/{dt}/{uuid.uuid4()}.{ext}"
     data = await file.read()
     result = put_object(path, data, file.content_type or "application/octet-stream")
     file_id = str(uuid.uuid4())
@@ -2604,27 +2638,47 @@ async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
         "original_filename": file.filename,
         "content_type": file.content_type,
         "size": result.get("size"),
-        "doc_type": f"Exchange {dt.replace('_', ' ').title()}",
-        "side": "exchange",
-        "exchange_doc_type": dt,
+        "doc_type": f"Lead {dt.replace('_', ' ').title()}",
+        "side": "identity" if dt in IDENTITY_DOC_TYPES else "exchange",
+        "bucket": dt,
         "uploaded_by": user["id"], "uploaded_by_name": user["name"],
         "is_deleted": False, "created_at": now_iso(),
     }
     await db.files.insert_one(frec)
-    exch = lead.get("exchange") or {}
-    if dt == "photo":
+
+    updates: Dict[str, Any] = {"updated_at": now_iso()}
+    if dt in IDENTITY_DOC_TYPES:
+        # Store at top-level lead.identity_docs.<bucket>[]
+        identity = lead.get("identity_docs") or {}
+        bucket = identity.get(dt) or []
+        bucket.append(file_id)
+        identity[dt] = bucket
+        updates["identity_docs"] = identity
+    elif dt == LEGACY_PHOTO_TYPE:
+        exch = lead.get("exchange") or {}
         photos = exch.get("photos") or []
         photos.append(file_id)
         exch["photos"] = photos
+        updates["exchange"] = exch
     else:
+        # Exchange doc: store at lead.exchange.documents.<bucket>[]
+        exch = lead.get("exchange") or {}
         documents = exch.get("documents") or {}
-        bucket = documents.get(dt) or []
-        bucket.append(file_id)
-        documents[dt] = bucket
+        bucket_list = documents.get(dt) or []
+        bucket_list.append(file_id)
+        documents[dt] = bucket_list
         exch["documents"] = documents
-    await db.leads.update_one({"id": lid}, {"$set": {"exchange": exch, "updated_at": now_iso()}})
+        updates["exchange"] = exch
+
+    await db.leads.update_one({"id": lid}, {"$set": updates})
     frec.pop("_id", None)
-    return {"file_id": file_id, "doc_type": dt, "exchange": exch}
+    refreshed = await db.leads.find_one({"id": lid}, {"_id": 0, "identity_docs": 1, "exchange": 1})
+    return {
+        "file_id": file_id,
+        "doc_type": dt,
+        "identity_docs": (refreshed or {}).get("identity_docs") or {},
+        "exchange": (refreshed or {}).get("exchange") or {},
+    }
 
 
 @api.delete("/leads/{lid}/exchange-photos/{file_id}")
@@ -2634,21 +2688,35 @@ async def delete_exchange_photo(lid: str, file_id: str, user: dict = Depends(get
         raise HTTPException(404, "Lead not found")
     if not await can_access_lead(user, lead):
         raise HTTPException(403, "Access denied")
-    exch = lead.get("exchange") or {}
     changed = False
+    updates: Dict[str, Any] = {}
+
+    # identity_docs
+    identity = lead.get("identity_docs") or {}
+    for k, arr in list(identity.items()):
+        if file_id in (arr or []):
+            identity[k] = [x for x in arr if x != file_id]
+            updates["identity_docs"] = identity
+            changed = True
+
+    # exchange legacy photos + documents
+    exch = lead.get("exchange") or {}
     photos = exch.get("photos") or []
     if file_id in photos:
-        photos.remove(file_id)
-        exch["photos"] = photos
+        exch["photos"] = [x for x in photos if x != file_id]
+        updates["exchange"] = exch
         changed = True
     documents = exch.get("documents") or {}
     for k, arr in list(documents.items()):
         if file_id in (arr or []):
             documents[k] = [x for x in arr if x != file_id]
             exch["documents"] = documents
+            updates["exchange"] = exch
             changed = True
+
     if changed:
-        await db.leads.update_one({"id": lid}, {"$set": {"exchange": exch, "updated_at": now_iso()}})
+        updates["updated_at"] = now_iso()
+        await db.leads.update_one({"id": lid}, {"$set": updates})
         await db.files.update_one({"id": file_id}, {"$set": {"is_deleted": True}})
     return {"ok": changed}
 

@@ -70,14 +70,16 @@ export default function LeadForm() {
     notes: "",
   });
   const [busy, setBusy] = useState(false);
-  // Staged files for Exchange Vehicle — uploaded after lead creation
+  // Staged files for Identity + Exchange — uploaded after lead creation
   const [stagedFiles, setStagedFiles] = useState({
-    aadhaar: [],       // aadhaar front (single)
-    aadhaar_back: [],  // aadhaar back (single)
-    rc_book: [],
-    front_photo: [],
-    back_photo: [],
-    other: [],
+    aadhaar: [],        // Identity — Aadhaar Front (mandatory for all)
+    aadhaar_back: [],   // Identity — Aadhaar Back (mandatory for all)
+    other: [],          // Identity — Other docs (optional, multi)
+    rc_front: [],       // Exchange — RC Front (mandatory for Exchange)
+    rc_back: [],        // Exchange — RC Back (mandatory for Exchange)
+    rc_pdf: [],         // Exchange — RC PDF (optional, multi)
+    front_photo: [],    // Exchange — Vehicle Front (mandatory for Exchange)
+    back_photo: [],     // Exchange — Vehicle Back (mandatory for Exchange)
   });
 
   useEffect(() => {
@@ -137,26 +139,27 @@ export default function LeadForm() {
 
       const { data } = await api.post("/leads", payload);
 
-      // Upload staged exchange files (if any) after successful lead creation
-      if (payload.purchase_type === "Exchange Vehicle") {
-        const all = Object.entries(stagedFiles).flatMap(([k, arr]) => arr.map((s) => ({ docType: k, file: s.file })));
-        if (all.length > 0) {
-          toast.loading(`Uploading ${all.length} file(s)…`, { id: "exch-up" });
-          for (const { docType, file } of all) {
-            try {
-              const fd = new FormData();
-              fd.append("file", file);
-              await api.post(`/leads/${data.id}/exchange-photos`, fd, {
-                headers: { "Content-Type": "multipart/form-data" },
-                params: { doc_type: docType },
-              });
-            } catch (err) {
-              // continue — don't block lead creation
-              console.error("Upload failed", docType, err);
-            }
+      // Upload staged files (identity always; exchange only when applicable)
+      const isExch = payload.purchase_type === "Exchange Vehicle";
+      const identityKeys = ["aadhaar", "aadhaar_back", "other"];
+      const exchangeKeys = ["rc_front", "rc_back", "rc_pdf", "front_photo", "back_photo"];
+      const keys = isExch ? [...identityKeys, ...exchangeKeys] : identityKeys;
+      const all = keys.flatMap((k) => (stagedFiles[k] || []).map((s) => ({ docType: k, file: s.file })));
+      if (all.length > 0) {
+        toast.loading(`Uploading ${all.length} file(s)…`, { id: "exch-up" });
+        for (const { docType, file } of all) {
+          try {
+            const fd = new FormData();
+            fd.append("file", file);
+            await api.post(`/leads/${data.id}/exchange-photos`, fd, {
+              headers: { "Content-Type": "multipart/form-data" },
+              params: { doc_type: docType },
+            });
+          } catch (err) {
+            console.error("Upload failed", docType, err);
           }
-          toast.success(`${all.length} file(s) uploaded`, { id: "exch-up" });
         }
+        toast.success(`${all.length} file(s) uploaded`, { id: "exch-up" });
       }
 
       toast.success("Lead created");
@@ -316,94 +319,131 @@ export default function LeadForm() {
           </Section>
         )}
 
-        {form.purchase_type === "Exchange Vehicle" && (
-          <Section title="Vehicle Documents & Images" desc="Capture live from camera or upload from gallery. Files are saved to this lead after it's created.">
-            <div className="md:col-span-2 space-y-5">
-              <div>
-                <div className="overline mb-2">Identity & Ownership Documents</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <StagedSlot
-                    label="Aadhaar Front"
-                    testid="staged-aadhaar"
-                    required
-                    files={stagedFiles.aadhaar}
-                    onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                    onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar: [] }))}
-                  />
-                  <StagedSlot
-                    label="Aadhaar Back"
-                    testid="staged-aadhaar-back"
-                    required
-                    files={stagedFiles.aadhaar_back}
-                    onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar_back: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                    onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar_back: [] }))}
-                  />
-                  <StagedSlot
-                    label="RC Book"
-                    testid="staged-rc-book"
-                    required
-                    files={stagedFiles.rc_book}
-                    onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_book: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                    onRemove={() => setStagedFiles((s) => ({ ...s, rc_book: [] }))}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="overline mb-2">Vehicle Photos</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <StagedSlot
-                    label="Front Photo"
-                    testid="staged-front"
-                    required
-                    imageOnly
-                    files={stagedFiles.front_photo}
-                    onAdd={(f) => setStagedFiles((s) => ({ ...s, front_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                    onRemove={() => setStagedFiles((s) => ({ ...s, front_photo: [] }))}
-                  />
-                  <StagedSlot
-                    label="Back Photo"
-                    testid="staged-back"
-                    required
-                    imageOnly
-                    files={stagedFiles.back_photo}
-                    onAdd={(f) => setStagedFiles((s) => ({ ...s, back_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                    onRemove={() => setStagedFiles((s) => ({ ...s, back_photo: [] }))}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="overline mb-2">Other Documents (optional)</div>
+        <Section
+          title="Identity Documents & Vehicle Uploads"
+          desc={form.purchase_type === "Exchange Vehicle"
+            ? "Capture or upload: Aadhaar (front+back), RC Book (front+back), Vehicle photos (front+back). Files are saved after lead creation."
+            : "Capture or upload: Aadhaar (front+back). Additional docs optional."}
+        >
+          <div className="md:col-span-2 space-y-5">
+            <div>
+              <div className="overline mb-2">Identity Documents (KYC)</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <StagedSlot
-                  label="Other Documents"
-                  testid="staged-other"
-                  multi
-                  files={stagedFiles.other}
-                  onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
-                  onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
+                  label="Aadhaar Front"
+                  testid="staged-aadhaar"
+                  required
+                  files={stagedFiles.aadhaar}
+                  onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                  onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar: [] }))}
+                />
+                <StagedSlot
+                  label="Aadhaar Back"
+                  testid="staged-aadhaar-back"
+                  required
+                  files={stagedFiles.aadhaar_back}
+                  onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar_back: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                  onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar_back: [] }))}
                 />
               </div>
-
-              {(() => {
-                const done =
-                  (stagedFiles.aadhaar.length ? 1 : 0) +
-                  (stagedFiles.aadhaar_back.length ? 1 : 0) +
-                  (stagedFiles.rc_book.length ? 1 : 0) +
-                  (stagedFiles.front_photo.length ? 1 : 0) +
-                  (stagedFiles.back_photo.length ? 1 : 0);
-                const other = stagedFiles.other.length;
-                return (
-                  <div className={`text-xs font-bold ${done === 5 ? "text-emerald-700" : "text-amber-700"}`} data-testid="staged-progress">
-                    {done === 5
-                      ? `✅ All 5 mandatory files staged${other ? ` · +${other} other` : ""}`
-                      : `⚠️ ${done}/5 mandatory files staged — will upload after lead is saved${other ? ` · +${other} other` : ""}`}
-                  </div>
-                );
-              })()}
             </div>
-          </Section>
-        )}
+
+            {form.purchase_type === "Exchange Vehicle" && (
+              <>
+                <div data-testid="staged-rc-section">
+                  <div className="overline mb-2">Vehicle Documents (RC Book)</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <StagedSlot
+                      label="RC Front"
+                      testid="staged-rc-front"
+                      required
+                      files={stagedFiles.rc_front}
+                      onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_front: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                      onRemove={() => setStagedFiles((s) => ({ ...s, rc_front: [] }))}
+                    />
+                    <StagedSlot
+                      label="RC Back"
+                      testid="staged-rc-back"
+                      required
+                      files={stagedFiles.rc_back}
+                      onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_back: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                      onRemove={() => setStagedFiles((s) => ({ ...s, rc_back: [] }))}
+                    />
+                    <StagedSlot
+                      label="RC PDF"
+                      testid="staged-rc-pdf"
+                      multi
+                      files={stagedFiles.rc_pdf}
+                      onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_pdf: [...s.rc_pdf, { file: f, preview: URL.createObjectURL(f) }] }))}
+                      onRemove={(idx) => setStagedFiles((s) => ({ ...s, rc_pdf: s.rc_pdf.filter((_, i) => i !== idx) }))}
+                    />
+                  </div>
+                </div>
+
+                <div data-testid="staged-vehicle-photos-section">
+                  <div className="overline mb-2">Vehicle Photos</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <StagedSlot
+                      label="Front Photo"
+                      testid="staged-front"
+                      required
+                      imageOnly
+                      files={stagedFiles.front_photo}
+                      onAdd={(f) => setStagedFiles((s) => ({ ...s, front_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                      onRemove={() => setStagedFiles((s) => ({ ...s, front_photo: [] }))}
+                    />
+                    <StagedSlot
+                      label="Back Photo"
+                      testid="staged-back"
+                      required
+                      imageOnly
+                      files={stagedFiles.back_photo}
+                      onAdd={(f) => setStagedFiles((s) => ({ ...s, back_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                      onRemove={() => setStagedFiles((s) => ({ ...s, back_photo: [] }))}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div>
+              <div className="overline mb-2">Other Documents (optional)</div>
+              <StagedSlot
+                label="Other Documents"
+                testid="staged-other"
+                multi
+                files={stagedFiles.other}
+                onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
+                onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
+              />
+            </div>
+
+            {(() => {
+              const isExch = form.purchase_type === "Exchange Vehicle";
+              const target = isExch ? 6 : 2;
+              const done =
+                (stagedFiles.aadhaar.length ? 1 : 0) +
+                (stagedFiles.aadhaar_back.length ? 1 : 0) +
+                (isExch ? (stagedFiles.rc_front.length ? 1 : 0) : 0) +
+                (isExch ? (stagedFiles.rc_back.length ? 1 : 0) : 0) +
+                (isExch ? (stagedFiles.front_photo.length ? 1 : 0) : 0) +
+                (isExch ? (stagedFiles.back_photo.length ? 1 : 0) : 0);
+              const other = stagedFiles.other.length;
+              const pdf = stagedFiles.rc_pdf.length;
+              const extras = [];
+              if (other) extras.push(`+${other} other`);
+              if (isExch && pdf) extras.push(`+${pdf} RC PDF`);
+              const extraStr = extras.length ? ` · ${extras.join(" · ")}` : "";
+              return (
+                <div className={`text-xs font-bold ${done === target ? "text-emerald-700" : "text-amber-700"}`} data-testid="staged-progress">
+                  {done === target
+                    ? `✅ All ${target} mandatory files staged${extraStr}`
+                    : `⚠️ ${done}/${target} mandatory files staged — will upload after lead is saved${extraStr}`}
+                </div>
+              );
+            })()}
+          </div>
+        </Section>
 
         <Section title="Deal">
           <Field label="Customer Expected Price">

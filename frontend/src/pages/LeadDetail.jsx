@@ -21,6 +21,7 @@ import {
 } from "../components/ui/dialog";
 import BookingSection from "../components/BookingSection";
 import ExchangeSection from "../components/ExchangeSection";
+import IdentityDocsPanel from "../components/IdentityDocsPanel";
 import DeliverySection from "../components/DeliverySection";
 import DocumentsSection from "../components/DocumentsSection";
 import WhatsappSection from "../components/WhatsappSection";
@@ -452,6 +453,7 @@ export default function LeadDetail() {
           <TabsTrigger value="followups" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-followups">Follow-ups ({followups.length})</TabsTrigger>
           <TabsTrigger value="deal" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-deal">Deal</TabsTrigger>
           <TabsTrigger value="booking" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-booking">Booking</TabsTrigger>
+          <TabsTrigger value="kyc" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-kyc">KYC</TabsTrigger>
           {lead.purchase_type === "Exchange Vehicle" && (
             <TabsTrigger value="exchange" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-exchange">Exchange</TabsTrigger>
           )}
@@ -831,6 +833,10 @@ export default function LeadDetail() {
 
         <TabsContent value="exchange" className="pt-6">
           <ExchangeSection lead={lead} constants={constants} onReload={reload} />
+        </TabsContent>
+
+        <TabsContent value="kyc" className="pt-6" data-testid="tab-content-kyc">
+          <IdentityDocsPanel lead={lead} onReload={reload} />
         </TabsContent>
 
         <TabsContent value="delivery" className="pt-6">

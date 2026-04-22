@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration-16 Unified KYC + Exchange document split tested end-to-end. Backend pytest 18/18 PASS in /app/backend/tests/test_iter16_kyc_split.py — (1) Identity buckets aadhaar / aadhaar_back / other route to lead.identity_docs.<bucket>[] (NOT lead.exchange.documents); (2) Exchange buckets rc_front / rc_back / rc_pdf / front_photo / back_photo route to lead.exchange.documents.<bucket>[]; (3) DELETE /api/leads/{lid}/exchange-photos/{file_id} transparently scans identity_docs + exchange.documents + exchange.photos and removes from whichever bucket the file lives in; (4) Stage-gate: stage→Lost & stage→Inquiry always allowed without KYC; stage→Follow-up on lead missing aadhaar+aadhaar_back returns 400 with detail 'Upload required KYC documents before advancing: Aadhaar Front, Aadhaar Back'; only-back-missing returns the back wording correctly; (5) For purchase_type=Exchange Vehicle, even with full identity, missing rc_front/rc_back/front_photo/back_photo returns 400 with 'Exchange Vehicle requires: RC Front, RC Back, Vehicle Front Photo, Vehicle Back Photo before advancing'; full-doc lead advances 200; (6) PUT /api/leads/{lid} with purchase_type='New Purchase' on an Exchange lead wipes lead.exchange to null while preserving identity_docs.aadhaar + aadhaar_back. Frontend Playwright (1920x1080, super_admin /leads/new): default New Purchase → only Identity Documents (KYC) section visible (staged-aadhaar + staged-aadhaar-back + staged-other), no RC/vehicle sections, staged-progress='⚠️ 0/2 mandatory files staged'. Click purchase-type-exchange-vehicle → staged-rc-section + staged-vehicle-photos-section appear with all 5 staged-{rc-front,rc-back,rc-pdf,front,back} slots; aadhaar still visible; staged-progress='⚠️ 0/6 mandatory files staged'. All 8 staged slots have capture-btn + upload-btn + 2 hidden inputs; capture-input has capture='environment', upload-input has no capture attr. Switch back to New Purchase → RC + vehicle sections disappear, staged-progress reverts to 0/2. LeadDetail (/leads/{ex_id}, an iter-16-test exchange lead): tab-kyc visible; clicking renders kyc-card with kyc-identity-grid (kyc-aadhaar + kyc-aadhaar-back) + kyc-other; kyc-progress='✅ KYC complete (Aadhaar Front + Back)'. tab-exchange shows all 5 slots (slot-rc-front, slot-rc-back, slot-rc-pdf, slot-front, slot-back) each with capture-btn + upload-btn + 2 inputs; exch-doc-progress='✅ All 4 exchange documents uploaded'. No blocking bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "LeadDetail Exchange tab progress", "issues": ["exch-doc-progress wording is 'All 4 exchange documents uploaded' — spec wording suggests it should also surface RC PDF extra count when present (verbiage like '✅ All 4 mandatory · +N RC PDF'). Currently extras-count line not observed in this run since lead had 0 rc_pdf. NON-BLOCKING."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter16_kyc_split.py",
+    "/app/test_reports/pytest/pytest_results_iter16.xml"
+  ],
+  "action_items": [
+    "NONE blocking for iter-16. Production-ready.",
+    "(LOW) exch-doc-progress on LeadDetail Exchange tab uses 'All 4 exchange documents uploaded' — confirm wording aligns with spec 'mandatory' + extras for rc_pdf when present. Cosmetic only.",
+    "(Carry-over iter-15) URL.createObjectURL preview leak in StagedSlot — minor.",
+    "(Carry-over iter-13) CalendarDialog missing DialogTitle/Description → Radix a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py L2612-2613: IDENTITY_DOC_TYPES={aadhaar, aadhaar_back, other}, EXCHANGE_DOC_TYPES={rc_front, rc_back, rc_pdf, front_photo, back_photo, rc_book}. Clean separation. rc_book retained for backward compat per agent note.",
+    "server.py L1471-1492: Stage gate logic correctly bypasses KYC requirement for stage in (Inquiry, Lost). Identity check first; if Exchange, then exchange-doc check follows with separate error message. Both messages are user-friendly with comma-joined missing buckets.",
+    "server.py L1356-1359: update_lead Exchange→New cleanup wipes exchange to None but does NOT touch identity_docs — semantically correct since Aadhaar is shared between flows.",
+    "server.py L2684-2722: DELETE endpoint walks identity_docs first, then exchange.photos, then exchange.documents — covers all 3 storage locations transparently. Marks file is_deleted=true. Returns {ok:true} regardless of source.",
+    "Default/unknown doc_type still falls back to LEGACY_PHOTO_TYPE='photo' (exchange.photos[]) — backward compatible but consider stricter validation in v17.",
+    "Frontend LeadForm.jsx StagedSlot (L538+): each slot consistently exposes -capture-btn, -capture-input (capture=environment), -upload-btn, -upload-input (no capture). staged-progress badge on L438 correctly reflects target=2 for New, target=6 for Exchange.",
+    "IdentityDocsPanel.jsx (L7-93): kyc-card + kyc-identity-grid + kyc-aadhaar + kyc-aadhaar-back + kyc-other testids all present; kyc-progress text turns emerald on doneMandatory==2.",
+    "ExchangeSection.jsx (L245-316): 'Vehicle Documents (RC Book)' card has slot-rc-front/rc-back/rc-pdf; 'Vehicle Photos' card has slot-front/slot-back; exch-doc-progress counts 4 mandatory exchange buckets only (does NOT include identity, since identity is now on KYC tab). Clean responsibility split."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter16_kyc_split.py (NEW — 18 tests, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 iter-16 tests PASS)",
+    "frontend": "100% on iter-16 scope — 8 staged slots × 2 buttons × 2 inputs (capture vs upload) verified, purchase-type switch toggles RC+Vehicle sections + progress 0/2↔0/6, LeadDetail KYC tab + Exchange tab render all expected testids and progress lines."
+  },
+  "test_credentials": "superadmin@dealer.com/super123 — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "~14 TEST_IT16_* leads created by pytest fixtures (TEST_IT16_New_*, TEST_IT16_Exc_*) — non-destructive.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-16 regression base: /app/backend/tests/test_iter16_kyc_split.py. Buckets — IDENTITY_DOC_TYPES={aadhaar, aadhaar_back, other} stored at lead.identity_docs; EXCHANGE_DOC_TYPES={rc_front, rc_back, rc_pdf, front_photo, back_photo, rc_book} stored at lead.exchange.documents. Stage gate requires aadhaar+aadhaar_back for any forward stage past Inquiry; Exchange additionally needs rc_front+rc_back+front_photo+back_photo. POST /api/leads requires source AND branch_id (use /api/branches[0].id). Stage→Lost requires lost_reason. Frontend testids — LeadForm: staged-{aadhaar|aadhaar-back|other|rc-front|rc-back|rc-pdf|front|back} each with -capture-btn / -capture-input / -upload-btn / -upload-input; staged-progress for target 2 (New) or 6 (Exchange); section wrappers staged-rc-section + staged-vehicle-photos-section (Exchange only). LeadDetail: tab-kyc → kyc-card / kyc-identity-grid / kyc-aadhaar / kyc-aadhaar-back / kyc-other / kyc-progress. tab-exchange → slot-{rc-front|rc-back|rc-pdf|front|back} each with same 4 testid suffixes; exch-doc-progress counts only the 4 exchange mandatory.",
+  "rca of the issue": "No iter-16 bug found. Test-authoring notes: (1) POST /api/leads requires source+branch_id (422 if missing); (2) Stage→Lost requires lost_reason (400 if missing); (3) /api/constants does not return brands — must hit /api/brands separately to set brand_id before Follow-up stage."
+}

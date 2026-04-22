@@ -8,7 +8,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "./ui/select";
 import { toast } from "sonner";
-import { ImagePlus, Handshake, Upload, FileText, Camera } from "lucide-react";
+import { ImagePlus, Handshake } from "lucide-react";
+import DocSlot, { fileUrl } from "./DocSlot";
 
 const Card = ({ title, children, right }) => (
   <div className="bg-white border border-zinc-200 rounded-sm p-5 mb-4">
@@ -19,11 +20,6 @@ const Card = ({ title, children, right }) => (
     {children}
   </div>
 );
-
-function fileUrl(fid) {
-  if (!fid) return null;
-  return `${API}/files/${fid}?auth=${encodeURIComponent(localStorage.getItem("access_token") || "")}`;
-}
 
 export default function ExchangeSection({ lead, constants, onReload }) {
   const fileRef = useRef(null);
@@ -246,47 +242,46 @@ export default function ExchangeSection({ lead, constants, onReload }) {
       </Card>
 
       <Card
-        title="Vehicle Documents & Images"
-        right={<span className="text-xs text-zinc-500">5 mandatory slots</span>}
+        title="Vehicle Documents (RC Book)"
+        right={<span className="text-xs text-zinc-500">RC Front + Back mandatory</span>}
       >
-        {/* Documents block */}
-        <div className="overline mb-2">Identity & Ownership Documents</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5" data-testid="exch-doc-slots">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="exch-rc-slots">
           <DocSlot
-            label="Aadhaar Front"
-            testid="slot-aadhaar"
-            docType="aadhaar"
+            label="RC Front"
+            testid="slot-rc-front"
+            docType="rc_front"
             required
-            imageOnly={false}
-            fileIds={documents.aadhaar || []}
-            onUpload={(f) => uploadPhoto(f, "aadhaar")}
+            fileIds={documents.rc_front || []}
+            onUpload={(f) => uploadPhoto(f, "rc_front")}
             onDelete={deleteFile}
           />
           <DocSlot
-            label="Aadhaar Back"
-            testid="slot-aadhaar-back"
-            docType="aadhaar_back"
+            label="RC Back"
+            testid="slot-rc-back"
+            docType="rc_back"
             required
-            imageOnly={false}
-            fileIds={documents.aadhaar_back || []}
-            onUpload={(f) => uploadPhoto(f, "aadhaar_back")}
+            fileIds={documents.rc_back || []}
+            onUpload={(f) => uploadPhoto(f, "rc_back")}
             onDelete={deleteFile}
           />
           <DocSlot
-            label="RC Book"
-            testid="slot-rc-book"
-            docType="rc_book"
-            required
-            imageOnly={false}
-            fileIds={documents.rc_book || []}
-            onUpload={(f) => uploadPhoto(f, "rc_book")}
+            label="RC PDF"
+            testid="slot-rc-pdf"
+            docType="rc_pdf"
+            optional
+            multi
+            fileIds={documents.rc_pdf || []}
+            onUpload={(f) => uploadPhoto(f, "rc_pdf")}
             onDelete={deleteFile}
           />
         </div>
+      </Card>
 
-        {/* Vehicle Photos block */}
-        <div className="overline mb-2">Vehicle Photos</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5" data-testid="exch-photo-slots">
+      <Card
+        title="Vehicle Photos"
+        right={<span className="text-xs text-zinc-500">Front + Back mandatory</span>}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="exch-photo-slots">
           <DocSlot
             label="Front Photo"
             testid="slot-front"
@@ -309,33 +304,19 @@ export default function ExchangeSection({ lead, constants, onReload }) {
           />
         </div>
 
-        {/* Other Documents */}
-        <div className="overline mb-2">Other Documents (optional)</div>
-        <DocSlot
-          label="Other Documents"
-          testid="slot-other"
-          docType="other"
-          multi
-          imageOnly={false}
-          fileIds={documents.other || []}
-          onUpload={(f) => uploadPhoto(f, "other")}
-          onDelete={deleteFile}
-        />
-
         <div className="mt-4 text-xs">
           {(() => {
             const done =
-              (documents.aadhaar?.length ? 1 : 0) +
-              (documents.aadhaar_back?.length ? 1 : 0) +
-              (documents.rc_book?.length ? 1 : 0) +
+              (documents.rc_front?.length ? 1 : 0) +
+              (documents.rc_back?.length ? 1 : 0) +
               (documents.front_photo?.length ? 1 : 0) +
               (documents.back_photo?.length ? 1 : 0);
-            const otherN = (documents.other || []).length;
+            const pdfN = (documents.rc_pdf || []).length;
             return (
-              <div className={`font-bold ${done === 5 ? "text-emerald-700" : "text-amber-700"}`} data-testid="exch-doc-progress">
-                {done === 5
-                  ? `✅ All 5 mandatory documents uploaded${otherN ? ` · +${otherN} other` : ""}`
-                  : `⚠️ ${done}/5 mandatory documents — all required${otherN ? ` · +${otherN} other` : ""}`}
+              <div className={`font-bold ${done === 4 ? "text-emerald-700" : "text-amber-700"}`} data-testid="exch-doc-progress">
+                {done === 4
+                  ? `✅ All 4 exchange documents uploaded${pdfN ? ` · +${pdfN} RC PDF` : ""}`
+                  : `⚠️ ${done}/4 exchange documents — RC Front + Back + Vehicle Front + Back required${pdfN ? ` · +${pdfN} RC PDF` : ""}`}
               </div>
             );
           })()}
@@ -371,126 +352,5 @@ export default function ExchangeSection({ lead, constants, onReload }) {
         </Card>
       )}
     </>
-  );
-}
-
-function DocSlot({ label, testid, docType, imageOnly, multi, required, fileIds, onUpload, onDelete }) {
-  const captureRef = useRef(null);
-  const uploadRef = useRef(null);
-  const has = fileIds && fileIds.length > 0;
-  const isImg = imageOnly === true || docType === "front_photo" || docType === "back_photo";
-  return (
-    <div
-      className={`border-2 rounded-sm p-3 ${
-        has && required ? "border-emerald-300 bg-emerald-50/30" :
-        has && !required ? "border-blue-300 bg-blue-50/30" :
-        required ? "border-dashed border-amber-300 bg-amber-50/30" :
-        "border-dashed border-zinc-300 bg-zinc-50"
-      }`}
-      data-testid={testid}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-bold text-xs uppercase tracking-wider flex items-center gap-1">
-          {label} {required && <span className="text-rose-600">*</span>}
-          {multi && <span className="text-[9px] font-semibold text-zinc-500">(multi)</span>}
-        </div>
-        <span
-          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${
-            has ? "bg-emerald-600 text-white" :
-            required ? "bg-amber-500 text-white" :
-            "bg-zinc-400 text-white"
-          }`}
-        >
-          {has ? (multi ? fileIds.length : "✓") : (required ? "!" : "+")}
-        </span>
-      </div>
-
-      {/* Hidden inputs — one for camera, one for gallery/file */}
-      <input
-        ref={captureRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files?.[0]) {
-            onUpload(e.target.files[0]);
-            e.target.value = "";
-          }
-        }}
-        data-testid={`${testid}-capture-input`}
-      />
-      <input
-        ref={uploadRef}
-        type="file"
-        accept={isImg ? "image/*" : "image/*,application/pdf"}
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files?.[0]) {
-            onUpload(e.target.files[0]);
-            e.target.value = "";
-          }
-        }}
-        data-testid={`${testid}-upload-input`}
-      />
-
-      {/* Two separate action buttons */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => captureRef.current?.click()}
-          className="rounded-sm font-semibold h-10 bg-white"
-          data-testid={`${testid}-capture-btn`}
-        >
-          <Camera className="w-4 h-4 mr-1" /> {has && !multi ? "Re-capture" : "Capture"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => uploadRef.current?.click()}
-          className="rounded-sm font-semibold h-10 bg-white"
-          data-testid={`${testid}-upload-btn`}
-        >
-          <Upload className="w-4 h-4 mr-1" /> {has && !multi ? "Re-upload" : "Upload"}
-        </Button>
-      </div>
-
-      {/* Preview area */}
-      {has && (
-        <div className="mt-3">
-          <div className={isImg && fileIds.length > 1 ? "grid grid-cols-2 gap-1" : "space-y-1"}>
-            {fileIds.map((fid) => {
-              const url = fileUrl(fid);
-              return (
-                <div key={fid} className="relative group">
-                  {isImg ? (
-                    <a href={url} target="_blank" rel="noreferrer" className="block">
-                      <img src={url} alt={label} className="border border-zinc-200 w-full aspect-square object-cover rounded-sm" />
-                    </a>
-                  ) : (
-                    <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-white border border-zinc-200 rounded-sm text-xs font-mono hover:border-brand">
-                      <FileText className="w-4 h-4 text-brand flex-shrink-0" />
-                      <span className="truncate">File · {fid.slice(0, 8)}…</span>
-                    </a>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onDelete(fid)}
-                    className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-6 h-6 text-xs font-bold opacity-90 group-hover:opacity-100 hover:bg-rose-700 flex items-center justify-center"
-                    data-testid={`${testid}-del-${fid}`}
-                    aria-label="Remove"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
