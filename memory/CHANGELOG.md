@@ -1,5 +1,32 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-22 — Iteration 17: Production Prep — DocumentsGallery + Demo Data Purge
+**Scope**: Go-live preparation. Single consolidated document view on Lead Detail + full data wipe.
+
+### Backend
+- New endpoint `POST /api/admin/purge-demo-data?confirm=SERVALL_PURGE&keep_master_data=true` (super_admin only):
+  - Wipes 17 transactional collections (`leads, followups, bookings, deliveries, allotments, payments, files, documents, exchange_valuations, negotiation_history, timeline, campaigns, automation_rules, wa_messages, whatsapp_logs, audit_logs, finance_cases`).
+  - Deletes all non-super-admin users.
+  - Sets `db.system_flags` doc `production_mode=true`.
+- `seed_data()` now checks `production_mode` flag — skips creating sample users (admin + 4 sales) and sample leads on restart. Master data (brands/models/variants/colors, WA templates, branches) remain preserved across restarts.
+- **Executed purge**: 279 leads + 184 files + 19 users + 1346 timeline entries + 403 audit logs wiped. 5 branches + master data + super_admin preserved.
+
+### Frontend
+- **NEW** `components/DocumentsGallery.jsx` — consolidated "Uploaded Documents & Photos" panel at the **top** of every Lead Detail Overview tab.
+  - 4 grouped sections with color-coded headers: Identity (emerald), Vehicle Documents — RC Book (blue), Vehicle Photos (amber), Other Documents (zinc).
+  - Thumbnail grid (3/4/6 cols responsive). Images render as `<img>`; PDFs as FileText icon with short id preview.
+  - Click thumbnail → full-screen `Lightbox` overlay with `ESC`/click-outside to close. Images shown in-place; PDFs open in new tab.
+  - Section/gallery is hidden when the lead has zero files (no empty shell).
+  - `onError` fallback for broken image src → placeholder icon.
+- Integrated into `LeadDetail.jsx` Overview tab — renders before the existing Customer/Lead cards.
+
+### Credentials (post-purge)
+`/app/memory/test_credentials.md` updated — only `superadmin@dealer.com / super123` remains.
+
+### Test report
+`/app/test_reports/iteration_17.json` — **100% PASS** (14/14 backend + full frontend Playwright).
+Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` + 5 leftover leads. Final production state: **1 user, 0 leads, 0 files.**
+
 ## 2026-04-22 — Iteration 16: Unified KYC + Exchange Document System
 **Scope**: Complete redesign — separate identity/KYC (all leads) from exchange-specific docs (Exchange only), with strict stage-gate enforcement.
 
