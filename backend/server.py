@@ -4100,10 +4100,73 @@ async def analytics_deals(user: dict = Depends(get_current_user)):
 
 
 # ============================================================
+# Admin — Production data purge
+# ============================================================
+
+@api.post("/admin/purge-demo-data")
+async def purge_demo_data(
+    confirm: str = "",
+    keep_master_data: bool = True,
+    user: dict = Depends(get_current_user),
+):
+    """DESTRUCTIVE. Super-admin only. Wipes all transactional data for production go-live."""
+    if user.get("role") != "super_admin":
+        raise HTTPException(403, "Only super admin can purge data")
+    if confirm != "SERVALL_PURGE":
+        raise HTTPException(400, "Missing confirm token — pass confirm=SERVALL_PURGE")
+
+    stats: Dict[str, int] = {}
+    transactional = [
+        "leads", "followups", "bookings", "deliveries", "allotments", "payments",
+        "files", "documents", "exchange_valuations", "negotiation_history", "timeline",
+        "campaigns", "automation_rules", "wa_messages", "whatsapp_logs",
+        "audit_logs", "finance_cases",
+    ]
+    for col in transactional:
+        res = await db[col].delete_many({})
+        stats[col] = res.deleted_count
+
+    # Delete non-super-admin users
+    res = await db.users.delete_many({"role": {"$ne": "super_admin"}})
+    stats["users_deleted"] = res.deleted_count
+
+    # Optionally wipe master data
+    if not keep_master_data:
+        for col in ("brands", "vehicle_models", "variants", "colors"):
+            res = await db[col].delete_many({})
+            stats[f"{col}_deleted"] = res.deleted_count
+
+    # Set production_mode flag so seed doesn't recreate sample data on restart
+    await db.system_flags.update_one(
+        {"id": "production_mode"},
+        {"$set": {
+            "id": "production_mode",
+            "enabled": True,
+            "purged_by": user["id"],
+            "purged_by_name": user["name"],
+            "purged_at": now_iso(),
+        }},
+        upsert=True,
+    )
+
+    return {
+        "ok": True,
+        "message": "Demo data purged. System is now in production mode.",
+        "stats": stats,
+    }
+
+
+
+
+# ============================================================
 # Seed & startup
 # ============================================================
 
 async def seed_data():
+    # If production_mode flag is set (via purge-demo-data), skip ALL demo seeding
+    prod_flag = await db.system_flags.find_one({"id": "production_mode"}, {"_id": 0})
+    is_production = bool(prod_flag and prod_flag.get("enabled"))
+
     # Indexes
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
@@ -4237,6 +4300,9 @@ async def seed_data():
     user_defs = [
         {"email": "superadmin@dealer.com", "password": "super123", "name": "Super Admin",
          "phone": "9000000000", "role": "super_admin", "branch": None, "manager": None},
+    ]
+    if not is_production:
+        user_defs += [
         {"email": "admin@dealer.com", "password": "admin123", "name": "Ravi Admin",
          "phone": "9000000001", "role": "admin", "branch": "Bilimora",
          "manager": "superadmin@dealer.com"},
@@ -4252,7 +4318,7 @@ async def seed_data():
         {"email": "sales4@dealer.com", "password": "sales123", "name": "Vikram Sales",
          "phone": "9000000014", "role": "sales_executive", "branch": "Gandevi",
          "manager": "admin@dealer.com"},
-    ]
+        ]
     # First pass: upsert users (without manager resolved)
     for u in user_defs:
         existing = await db.users.find_one({"email": u["email"]})
@@ -4330,7 +4396,7 @@ async def seed_data():
 
     # Sample leads
     count = await db.leads.count_documents({})
-    if count == 0:
+    if count == 0 and not is_production:
         sales_exec = await db.users.find_one({"email": "sales1@dealer.com"}, {"_id": 0})
         honda = await db.brands.find_one({"name": "Honda"}, {"_id": 0})
         activa = await db.vehicle_models.find_one({"name": "Activa 6G"}, {"_id": 0})

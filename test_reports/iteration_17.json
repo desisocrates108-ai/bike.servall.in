@@ -1,0 +1,43 @@
+{
+  "summary": "Iter-17 production purge + DocumentsGallery e2e PASSED. Backend pytest 14/14 in /app/backend/tests/test_iter17_purge.py — (a) Purge state: GET /api/users contains super_admin (plus 1 real user 'uday@gmail.com' added post-purge by another test), zero demo accounts; demo logins admin@/sales1-4@dealer.com all return 401; GET /api/leads has only TEST_IT17_* leads I created; GET /api/branches=5 (Amalsad,Bilimora,Chikhli,Gandevi,Vansda); /api/settings/integrations + /api/settings/11za respond 200/404 (preserved). (b) Purge guards: POST /api/admin/purge-demo-data without confirm → 400, confirm=WRONG → 400, unauthenticated → 401. (c) Doc gallery prereq: created Exchange lead with all 8 buckets (aadhaar,aadhaar_back,other,rc_front,rc_back,rc_pdf,front_photo,back_photo) and New-Purchase lead with only aadhaar/aadhaar_back/other — verified storage routing (identity_docs vs exchange.documents). Frontend Playwright (1920×1080, super_admin): Dashboard '0%' conversion + 'No leads yet' label visible; Leads page lists only my 4 TEST_IT17 leads; Users page shows ONLY Super Admin + uday (no demo rows). DocumentsGallery on Exchange lead /leads/{id} Overview tab top: data-testid='docs-gallery' rendered; gallery-section-identity (count=2), gallery-section-rc (count=3 incl. rc_pdf), gallery-section-photos (count=2), gallery-section-other (count=1) — exact 4 sections. gallery-thumb-rc-2 (rc_pdf) has FileText <svg> NOT <img>. Click gallery-thumb-identity-0 → gallery-lightbox + gallery-lightbox-close appear; close dismisses overlay. Click gallery-thumb-rc-2 (PDF) → lightbox renders <a target='_blank'> with text 'Open RC PDF in new tab →' and NO <img>. New-Purchase lead: only gallery-section-identity + gallery-section-other present (no rc / no photos). Empty lead (zero docs): docs-gallery testid ABSENT, Overview cards still render normally. All iter-17 acceptance criteria met.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DocumentsGallery thumbnails", "issues": ["Image thumbnails fall back to placeholder icon when src 404s — robust onError handler works correctly. Note: my JPG seed buffers were minimal/invalid so all image previews showed fallback icons during this test; however the <img src=fileUrl(fid)> tags ARE generated (verified via DOM). With real uploads this will display thumbnails. Non-blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_purge.py",
+    "/app/test_reports/pytest/pytest_results_iter17.xml"
+  ],
+  "action_items": [
+    "NONE blocking. Iter-17 production-ready.",
+    "(LOW) Empty 'EMPTY lead' check requires creating lead via API with no uploads; previously-created TEST leads from fixtures may carry forward docs across runs — unrelated to code.",
+    "(Carry-over iter-16) exch-doc-progress wording could surface +N rc_pdf extras count.",
+    "(Carry-over iter-15) URL.createObjectURL preview leak in StagedSlot — minor."
+  ],
+  "critical_code_review_comments": [
+    "server.py L4106-4156: /admin/purge-demo-data correctly enforces super_admin role (403) + SERVALL_PURGE confirm token (400) BEFORE any deletion. Wipes 17 transactional collections + non-super_admin users + sets system_flags.production_mode=true. keep_master_data=true default preserves brands/models/variants/colors. Clean idempotent stat return.",
+    "server.py L4165-4168: seed_data() reads system_flags.production_mode at startup — when enabled, all sample lead/user/template seeding is skipped. Verified by absence of demo accounts after purge.",
+    "DocumentsGallery.jsx L18-57: useMemo correctly groups identity{aadhaar,aadhaar_back}, rc{rc_front,rc_back,rc_pdf,rc_book}, photos{front_photo,back_photo,legacyPhotos}, other{other}. Each group rendered ONLY if items.length>0 — clean conditional sections. Total==0 short-circuits to null (verified empty lead test).",
+    "DocumentsGallery.jsx L93-124: each thumb keyed by ${fid}-${idx}; data-testid `gallery-thumb-${key}-${idx}` consistent. Image branch uses lazy loading + onError fallback to ImageIcon placeholder. Non-image branch shows FileText icon + 8-char fid prefix.",
+    "DocumentsGallery.jsx L138-174: Lightbox z-[100] black/90 overlay; outer onClick dismisses, inner stopPropagation prevents accidental close. Image branch uses object-contain max-h-[80vh]; PDF/file branch shows white anchor with target='_blank' rel='noreferrer' — security correct.",
+    "test_credentials.md updated to reflect single super_admin only — matches actual DB state.",
+    "Minor: rc_book bucket retained in DocumentsGallery rc-section iteration (L35) for backward compat, even though iter-16 separated rc_book into rc_pdf — fine for legacy data."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_purge.py (NEW — 14 pytest cases, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 iter-17 pytest cases PASS)",
+    "frontend": "100% on iter-17 scope — DocumentsGallery renders/hides correctly per data, Lightbox image+PDF branches both verified, all section/thumbnail testids match spec, purge state visible across Dashboard+Leads+Users."
+  },
+  "test_credentials": "superadmin@dealer.com/super123 — sourced from /app/memory/test_credentials.md (only valid account post-purge).",
+  "seed_data_creation": "5 TEST_IT17_* leads created via API (2 Exchange w/ uploaded docs, 2 New Purchase, 1 Empty New Purchase). Files attached to leads use minimal binary buffers (8-byte JPG header + tiny PDF) — fine for routing/persistence verification but not visually renderable.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-17 baseline: production_mode flag is SET — restarting backend will NOT reseed demo users/leads. Only valid login is superadmin@dealer.com/super123. Sales-executive 'uday@gmail.com' was created by an external add-user test and persists. To re-create demo data, super-admin must `await db.system_flags.delete_one({'id':'production_mode'})` then restart. DocumentsGallery testids: docs-gallery, gallery-section-{identity|rc|photos|other}, gallery-grid-{key}, gallery-thumb-{key}-{idx}, gallery-lightbox, gallery-lightbox-close. Gallery hides itself when total==0 (verified). Backend purge endpoint: POST /api/admin/purge-demo-data?confirm=SERVALL_PURGE&keep_master_data=true|false (super_admin only; 400 if confirm wrong; 403 if non-super). Auth login response field is `access_token` (NOT `token`).",
+  "rca of the issue": "No iter-17 bugs. Notes for future agents: (1) /api/auth/login returns {access_token, user} — KeyError if you use 'token'; (2) leads/{id}/exchange-photos?doc_type=X is the multi-bucket upload endpoint (covers identity buckets too via iter-16 routing); (3) DocumentsGallery uses lead.identity_docs.* + lead.exchange.documents.* + lead.exchange.photos[] (legacy) — no separate API call required, all data ships with GET /api/leads/{id}; (4) Empty-state test must use a freshly created lead with zero uploads since fixture-created leads carry docs across pytest runs."
+}

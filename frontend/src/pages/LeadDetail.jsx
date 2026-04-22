@@ -22,6 +22,7 @@ import {
 import BookingSection from "../components/BookingSection";
 import ExchangeSection from "../components/ExchangeSection";
 import IdentityDocsPanel from "../components/IdentityDocsPanel";
+import DocumentsGallery from "../components/DocumentsGallery";
 import DeliverySection from "../components/DeliverySection";
 import DocumentsSection from "../components/DocumentsSection";
 import WhatsappSection from "../components/WhatsappSection";
@@ -465,6 +466,7 @@ export default function LeadDetail() {
         </TabsList>
 
         <TabsContent value="overview" className="pt-6">
+          <DocumentsGallery lead={lead} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card title="Customer">
               <div className="grid grid-cols-2 gap-4">
