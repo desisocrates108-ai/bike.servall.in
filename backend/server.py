@@ -2462,14 +2462,20 @@ async def list_exchange_valuations(lid: str, user: dict = Depends(get_current_us
 
 @api.post("/leads/{lid}/exchange-photos")
 async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
+                                doc_type: str = "photo",
                                 user: dict = Depends(get_current_user)):
     lead = await db.leads.find_one({"id": lid}, {"_id": 0})
     if not lead:
         raise HTTPException(404, "Lead not found")
     if not await can_access_lead(user, lead):
         raise HTTPException(403, "Access denied")
+    # doc_type controls which bucket to store file id under
+    allowed_types = {"photo", "aadhaar", "rc_book", "front_photo", "back_photo"}
+    dt = (doc_type or "photo").lower()
+    if dt not in allowed_types:
+        dt = "photo"
     ext = (file.filename or "bin").split(".")[-1].lower() if "." in (file.filename or "") else "bin"
-    path = f"{APP_NAME}/leads/{lid}/exchange/{uuid.uuid4()}.{ext}"
+    path = f"{APP_NAME}/leads/{lid}/exchange/{dt}/{uuid.uuid4()}.{ext}"
     data = await file.read()
     result = put_object(path, data, file.content_type or "application/octet-stream")
     file_id = str(uuid.uuid4())
@@ -2479,18 +2485,53 @@ async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
         "original_filename": file.filename,
         "content_type": file.content_type,
         "size": result.get("size"),
-        "doc_type": "Exchange Photo", "side": "exchange",
+        "doc_type": f"Exchange {dt.replace('_', ' ').title()}",
+        "side": "exchange",
+        "exchange_doc_type": dt,
         "uploaded_by": user["id"], "uploaded_by_name": user["name"],
         "is_deleted": False, "created_at": now_iso(),
     }
     await db.files.insert_one(frec)
     exch = lead.get("exchange") or {}
-    photos = exch.get("photos") or []
-    photos.append(file_id)
-    exch["photos"] = photos
+    if dt == "photo":
+        photos = exch.get("photos") or []
+        photos.append(file_id)
+        exch["photos"] = photos
+    else:
+        documents = exch.get("documents") or {}
+        bucket = documents.get(dt) or []
+        bucket.append(file_id)
+        documents[dt] = bucket
+        exch["documents"] = documents
     await db.leads.update_one({"id": lid}, {"$set": {"exchange": exch, "updated_at": now_iso()}})
     frec.pop("_id", None)
-    return {"file_id": file_id, "photos": photos}
+    return {"file_id": file_id, "doc_type": dt, "exchange": exch}
+
+
+@api.delete("/leads/{lid}/exchange-photos/{file_id}")
+async def delete_exchange_photo(lid: str, file_id: str, user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if not await can_access_lead(user, lead):
+        raise HTTPException(403, "Access denied")
+    exch = lead.get("exchange") or {}
+    changed = False
+    photos = exch.get("photos") or []
+    if file_id in photos:
+        photos.remove(file_id)
+        exch["photos"] = photos
+        changed = True
+    documents = exch.get("documents") or {}
+    for k, arr in list(documents.items()):
+        if file_id in (arr or []):
+            documents[k] = [x for x in arr if x != file_id]
+            exch["documents"] = documents
+            changed = True
+    if changed:
+        await db.leads.update_one({"id": lid}, {"$set": {"exchange": exch, "updated_at": now_iso()}})
+        await db.files.update_one({"id": file_id}, {"$set": {"is_deleted": True}})
+    return {"ok": changed}
 
 
 

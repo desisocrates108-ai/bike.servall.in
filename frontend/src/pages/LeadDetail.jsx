@@ -404,7 +404,7 @@ export default function LeadDetail() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setStageDialog(false)}>Cancel</Button>
-                <Button onClick={submitStage} disabled={!nextStage} className="bg-brand hover:bg-brand-dark" data-testid="confirm-stage-btn">
+                <Button onClick={submitStage} disabled={!nextStage || (nextStage === "Lost" && !lostReason) || (nextStage === "Lost" && lostReason === "Other" && !lostText.trim())} className="bg-brand hover:bg-brand-dark" data-testid="confirm-stage-btn">
                   Confirm
                 </Button>
               </DialogFooter>

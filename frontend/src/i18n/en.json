@@ -20,6 +20,8 @@
     "automation": "Automation",
     "masters": "Master Data",
     "reports": "Reports",
+    "reminders": "Reminders",
+    "integrations": "Integrations",
     "logout": "Logout"
   },
   "login": {

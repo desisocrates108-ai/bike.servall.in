@@ -102,14 +102,26 @@ export default function ExchangeSection({ lead, constants, onReload }) {
     }
   };
 
-  const uploadPhoto = async (file) => {
+  const uploadPhoto = async (file, docType = "photo") => {
     try {
       const fd = new FormData();
       fd.append("file", file);
       await api.post(`/leads/${lead.id}/exchange-photos`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
+        params: { doc_type: docType },
       });
-      toast.success("Photo uploaded");
+      toast.success("Uploaded");
+      onReload && onReload();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail));
+    }
+  };
+
+  const deleteFile = async (fileId) => {
+    if (!window.confirm("Delete this file?")) return;
+    try {
+      await api.delete(`/leads/${lead.id}/exchange-photos/${fileId}`);
+      toast.success("Deleted");
       onReload && onReload();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail));
@@ -117,6 +129,7 @@ export default function ExchangeSection({ lead, constants, onReload }) {
   };
 
   const photos = (lead.exchange || {}).photos || [];
+  const documents = (lead.exchange || {}).documents || {};
 
   return (
     <>
@@ -232,28 +245,158 @@ export default function ExchangeSection({ lead, constants, onReload }) {
         )}
       </Card>
 
+      <Card title="Mandatory Documents (4)" right={<span className="text-xs text-zinc-500">Aadhaar · RC Book · Front · Back</span>}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" data-testid="exch-doc-slots">
+          <DocSlot
+            label="Aadhaar Card"
+            testid="slot-aadhaar"
+            docType="aadhaar"
+            fileIds={documents.aadhaar || []}
+            onUpload={(f) => uploadPhoto(f, "aadhaar")}
+            onDelete={deleteFile}
+          />
+          <DocSlot
+            label="RC Book"
+            testid="slot-rc-book"
+            docType="rc_book"
+            fileIds={documents.rc_book || []}
+            onUpload={(f) => uploadPhoto(f, "rc_book")}
+            onDelete={deleteFile}
+          />
+          <DocSlot
+            label="Vehicle Front"
+            testid="slot-front"
+            docType="front_photo"
+            imageOnly
+            fileIds={documents.front_photo || []}
+            onUpload={(f) => uploadPhoto(f, "front_photo")}
+            onDelete={deleteFile}
+          />
+          <DocSlot
+            label="Vehicle Back"
+            testid="slot-back"
+            docType="back_photo"
+            imageOnly
+            fileIds={documents.back_photo || []}
+            onUpload={(f) => uploadPhoto(f, "back_photo")}
+            onDelete={deleteFile}
+          />
+        </div>
+        <div className="mt-3 text-xs">
+          {(() => {
+            const done =
+              (documents.aadhaar?.length ? 1 : 0) +
+              (documents.rc_book?.length ? 1 : 0) +
+              (documents.front_photo?.length ? 1 : 0) +
+              (documents.back_photo?.length ? 1 : 0);
+            return (
+              <div className={`font-bold ${done === 4 ? "text-emerald-700" : "text-amber-700"}`} data-testid="exch-doc-progress">
+                {done === 4 ? "✅ All 4 documents uploaded" : `⚠️ ${done}/4 documents uploaded — all required`}
+              </div>
+            );
+          })()}
+        </div>
+      </Card>
+
       <Card
-        title={`Photos (${photos.length})`}
+        title={`Additional Photos (${photos.length})`}
         right={
           <>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])} data-testid="exch-photo-input" />
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0], "photo")} data-testid="exch-photo-input" />
             <Button size="sm" onClick={() => fileRef.current?.click()} className="bg-brand hover:bg-brand-dark rounded-sm" data-testid="exch-photo-btn">
               <ImagePlus className="w-4 h-4 mr-1" /> Add photo
             </Button>
           </>
         }
       >
-        {photos.length === 0 && <div className="text-sm text-zinc-400">No photos uploaded yet.</div>}
+        {photos.length === 0 && <div className="text-sm text-zinc-400">No extra photos uploaded yet.</div>}
         {photos.length > 0 && (
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
             {photos.map((fid) => (
-              <a key={fid} href={fileUrl(fid)} target="_blank" rel="noreferrer" className="block">
-                <img src={fileUrl(fid)} alt="" className="border border-zinc-200 w-full aspect-square object-cover" />
-              </a>
+              <div key={fid} className="relative group">
+                <a href={fileUrl(fid)} target="_blank" rel="noreferrer" className="block">
+                  <img src={fileUrl(fid)} alt="" className="border border-zinc-200 w-full aspect-square object-cover" />
+                </a>
+                <button
+                  onClick={() => deleteFile(fid)}
+                  className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-5 h-5 text-xs font-bold opacity-0 group-hover:opacity-100"
+                  data-testid={`exch-photo-del-${fid}`}
+                >×</button>
+              </div>
             ))}
           </div>
         )}
       </Card>
     </>
+  );
+}
+
+function DocSlot({ label, testid, docType, imageOnly, fileIds, onUpload, onDelete }) {
+  const ref = useRef(null);
+  const has = fileIds && fileIds.length > 0;
+  return (
+    <div className={`border-2 rounded-sm p-3 ${has ? "border-emerald-300 bg-emerald-50/30" : "border-dashed border-zinc-300 bg-zinc-50"}`} data-testid={testid}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-bold text-xs uppercase tracking-wider">{label}</div>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${has ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"}`}>
+          {has ? "✓" : "!"}
+        </span>
+      </div>
+      <input
+        ref={ref}
+        type="file"
+        accept={imageOnly ? "image/*" : "image/*,application/pdf"}
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])}
+        data-testid={`${testid}-input`}
+      />
+      {!has && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => ref.current?.click()}
+          className="w-full rounded-sm font-semibold"
+          data-testid={`${testid}-btn`}
+        >
+          <Upload className="w-3.5 h-3.5 mr-1" /> Upload
+        </Button>
+      )}
+      {has && (
+        <div className="space-y-2">
+          {fileIds.map((fid) => {
+            const url = fileUrl(fid);
+            const isImg = docType === "front_photo" || docType === "back_photo";
+            return (
+              <div key={fid} className="relative group">
+                {isImg ? (
+                  <a href={url} target="_blank" rel="noreferrer" className="block">
+                    <img src={url} alt={label} className="border border-zinc-200 w-full aspect-square object-cover rounded-sm" />
+                  </a>
+                ) : (
+                  <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-2 bg-white border border-zinc-200 rounded-sm text-xs font-mono hover:border-brand">
+                    <FileText className="w-4 h-4 text-brand flex-shrink-0" />
+                    <span className="truncate">View file</span>
+                  </a>
+                )}
+                <button
+                  onClick={() => onDelete(fid)}
+                  className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-5 h-5 text-xs font-bold opacity-0 group-hover:opacity-100"
+                  data-testid={`${testid}-del-${fid}`}
+                >×</button>
+              </div>
+            );
+          })}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => ref.current?.click()}
+            className="w-full rounded-sm text-xs"
+            data-testid={`${testid}-add-more`}
+          >
+            <Upload className="w-3 h-3 mr-1" /> Replace / Add
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

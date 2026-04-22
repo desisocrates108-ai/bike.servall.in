@@ -171,12 +171,19 @@ export default function LeadForm() {
             </Select>
           </Field>
           <Field label="Branch (POS) *">
-            <Select value={form.branch_id} onValueChange={(v) => set("branch_id", v)} disabled={user?.role === "admin"}>
-              <SelectTrigger data-testid="branch-select"><SelectValue placeholder="Select branch" /></SelectTrigger>
-              <SelectContent>
-                {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {user?.role === "sales_executive" ? (
+              <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-sm text-sm text-zinc-600" data-testid="branch-auto-label">
+                {branches.find((b) => b.id === user.branch_id)?.name || "Auto-assigned to your branch"}
+                <span className="ml-2 text-[10px] uppercase font-bold text-emerald-700">· Auto</span>
+              </div>
+            ) : (
+              <Select value={form.branch_id} onValueChange={(v) => set("branch_id", v)} disabled={user?.role === "admin"}>
+                <SelectTrigger data-testid="branch-select"><SelectValue placeholder="Select branch" /></SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </Field>
           <Field label="Priority">
             <Select value={form.priority} onValueChange={(v) => set("priority", v)}>

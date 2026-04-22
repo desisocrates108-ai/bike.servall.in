@@ -22,6 +22,8 @@ import {
   Plus,
   Contact as ContactIcon,
   BarChart3,
+  BellRing,
+  Plug,
 } from "lucide-react";
 import LanguageToggle from "./LanguageToggle";
 import GlobalSearch from "./GlobalSearch";
@@ -84,6 +86,9 @@ export default function Layout({ children }) {
         <NavLink to="/contacts" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-contacts">
           <ContactIcon className="w-4 h-4" strokeWidth={1.75} /> {t("nav.contacts", "Contacts")}
         </NavLink>
+        <NavLink to="/reminders" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-reminders">
+          <BellRing className="w-4 h-4" strokeWidth={1.75} /> {t("nav.reminders", "Reminders")}
+        </NavLink>
         <NavLink to="/leads/new" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-new-lead">
           <PlusCircle className="w-4 h-4" strokeWidth={1.75} /> {t("nav.new_lead")}
         </NavLink>
@@ -113,6 +118,9 @@ export default function Layout({ children }) {
             </NavLink>
             <NavLink to="/automation" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-automation">
               <Zap className="w-4 h-4" strokeWidth={1.75} /> {t("nav.automation")}
+            </NavLink>
+            <NavLink to="/integrations" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-integrations">
+              <Plug className="w-4 h-4" strokeWidth={1.75} /> {t("nav.integrations", "Integrations")}
             </NavLink>
             {isSuper && (
               <NavLink to="/masters" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-masters">

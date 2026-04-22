@@ -4,6 +4,8 @@ import { api } from "../api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import PageHeader from "../components/PageHeader";
+import DateRangeFilter from "../components/DateRangeFilter";
+import GujaratiCalendar from "../components/GujaratiCalendar";
 import {
   TrendingUp, CheckCircle2, XCircle, Clock, Flame, Users2,
   AlertTriangle, CalendarClock, BadgePercent, Gavel, PhoneCall,
@@ -74,6 +76,8 @@ export default function Dashboard() {
   const [hotLeads, setHotLeads] = useState([]);
   const [branchFilter, setBranchFilter] = useState("");
   const [branches, setBranches] = useState([]);
+  const [dateRange, setDateRange] = useState({ from: "", to: "" });
+  const [lostBreakdown, setLostBreakdown] = useState([]);
 
   useEffect(() => {
     if (user?.role === "super_admin") {
@@ -82,7 +86,11 @@ export default function Dashboard() {
   }, [user?.role]);
 
   useEffect(() => {
-    const params = branchFilter ? { branch_id: branchFilter } : {};
+    const params = {
+      ...(branchFilter ? { branch_id: branchFilter } : {}),
+      ...(dateRange.from ? { from_date: dateRange.from } : {}),
+      ...(dateRange.to ? { to_date: dateRange.to } : {}),
+    };
     api.get("/analytics/summary", { params }).then((r) => setSummary(r.data)).catch(() => {});
     if (user?.role !== "sales_executive") {
       api.get("/analytics/performance", { params }).then((r) => setPerf(r.data)).catch(() => {});
@@ -94,7 +102,19 @@ export default function Dashboard() {
     }
     const leadParams = { priority: "Hot", ...(branchFilter ? { branch_id: branchFilter } : {}) };
     api.get("/leads", { params: leadParams }).then((r) => setHotLeads((r.data || []).slice(0, 5))).catch(() => {});
-  }, [user?.role, branchFilter]);
+    // Lost analysis breakdown — fetch Lost leads and group by lost_reason
+    if (user?.role !== "sales_executive") {
+      const lostParams = { stage: "Lost", page_size: 500, ...(branchFilter ? { branch_id: branchFilter } : {}) };
+      api.get("/leads", { params: lostParams }).then((r) => {
+        const counts = {};
+        (r.data || []).forEach((l) => {
+          const k = l.lost_reason || "Unspecified";
+          counts[k] = (counts[k] || 0) + 1;
+        });
+        setLostBreakdown(Object.entries(counts).sort((a, b) => b[1] - a[1]));
+      }).catch(() => {});
+    }
+  }, [user?.role, branchFilter, dateRange.from, dateRange.to]);
 
   const stages = useMemo(() => Object.entries(summary?.per_stage || {}), [summary]);
   const sources = useMemo(
@@ -137,17 +157,20 @@ export default function Dashboard() {
         showBack={false}
         sticky
         right={
-          isCEO && branches.length > 0 ? (
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="h-10 rounded-sm border border-zinc-200 bg-white px-3 text-sm font-medium focus:outline-none focus:border-brand"
-              data-testid="dash-branch-filter"
-            >
-              <option value="">{t("dash.all_branches", "All branches")}</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          ) : null
+          <div className="flex items-center gap-2">
+            <DateRangeFilter value={dateRange} onChange={setDateRange} testid="dash-date-range" />
+            {isCEO && branches.length > 0 ? (
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="h-10 rounded-sm border border-zinc-200 bg-white px-3 text-sm font-medium focus:outline-none focus:border-brand"
+                data-testid="dash-branch-filter"
+              >
+                <option value="">{t("dash.all_branches", "All branches")}</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            ) : null}
+          </div>
         }
       />
 
@@ -244,6 +267,18 @@ export default function Dashboard() {
               <Stat label={t("dash.ceo.pending", "Pending Approvals")} value={summary.pending_approvals || 0} icon={AlertTriangle} tone="warn" testid="stat-pending" />
               <Stat label={t("dash.ceo.avg_disc", "Avg Discount")} value={summary.avg_discount ? `₹${summary.avg_discount}` : "—"} icon={BadgePercent} testid="stat-avg-disc" />
             </div>
+
+            {/* Gujarati Calendar widget */}
+            <div className="mb-4" data-testid="dash-calendar-wrap">
+              <GujaratiCalendar />
+            </div>
+          </div>
+        )}
+
+        {/* Admin: also show the Calendar */}
+        {isAdmin && (
+          <div className="mb-4" data-testid="dash-calendar-wrap-admin">
+            <GujaratiCalendar />
           </div>
         )}
 
@@ -408,24 +443,48 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* CEO loss analysis */}
-        {isCEO && summary.lost > 0 && (
-          <Link to="/leads?stage=Lost" className="block mt-4" data-testid="loss-card-link">
-            <Card testid="loss-card" className="hover:border-rose-300 active:bg-zinc-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <TrendingDown className="w-5 h-5 text-rose-600 mt-0.5" />
-                  <div>
-                    <div className="overline">{t("dash.ceo.loss", "Loss analysis")}</div>
-                    <div className="text-sm text-zinc-700 mt-1">
-                      {t("dash.ceo.loss_desc", "{{lost}} leads lost out of {{total}}. Review reasons in lead details.", { lost: summary.lost, total: summary.total_leads })}
-                    </div>
-                  </div>
+        {/* Loss analysis breakdown — CEO + Admin */}
+        {!isSales && lostBreakdown.length > 0 && (
+          <Card testid="loss-breakdown-card" className="mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="w-4 h-4 text-rose-600" />
+                <div>
+                  <div className="overline">{t("dash.ceo.loss", "Loss analysis")}</div>
+                  <div className="font-display text-lg font-bold mt-1">Why are we losing leads?</div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-zinc-400" />
               </div>
-            </Card>
-          </Link>
+              <Link to="/leads?stage=Lost" className="text-xs font-semibold text-brand hover:underline">
+                {t("common.see_all", "See all")} →
+              </Link>
+            </div>
+            {(() => {
+              const totalLost = lostBreakdown.reduce((s, [, n]) => s + n, 0) || 1;
+              return (
+                <div className="space-y-2">
+                  {lostBreakdown.map(([reason, n]) => {
+                    const pct = Math.round((n / totalLost) * 100);
+                    return (
+                      <Link
+                        key={reason}
+                        to={`/leads?stage=Lost`}
+                        className="block hover:opacity-90"
+                        data-testid={`loss-reason-${reason.replace(/\s+/g, "-")}`}
+                      >
+                        <div className="flex items-center justify-between mb-1 text-sm">
+                          <span className="font-semibold truncate">{reason}</span>
+                          <span className="font-mono text-zinc-500">{n} ({pct}%)</span>
+                        </div>
+                        <div className="h-2.5 bg-zinc-100 rounded-sm overflow-hidden">
+                          <div className="h-full bg-rose-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </Card>
         )}
 
         {summary.at_risk > 0 && (

@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration-12 Servall CRM P0 bundle validated. Backend pytest 18/18 PASS at /app/backend/tests/test_iter12_p0.py covering (1) GET /api/settings/integrations RBAC — super_admin/admin 200 with triggers {inquiry_created, delivery_completed, feedback_reminder} + masked api key; sales_executive 403. (2) PUT /api/settings/integrations — super_admin 200, admin 403; masked key ends with last-4 after save. (3) GET /api/analytics/summary with from_date/to_date — future range returns total_leads=0; broad range returns >0 and full schema. (4) GET /api/analytics/performance with date-range + sales_executive 403. (5) POST /api/leads/{id}/exchange-photos parametrized across doc_type ∈ {aadhaar, rc_book, front_photo, back_photo} — each file_id lands in exchange.documents.<bucket>[]; default (no doc_type) lands in exchange.photos[] (backward-compat preserved). (6) DELETE /api/leads/{id}/exchange-photos/{file_id} removes from both photos[] and documents.* buckets (ok:true). (7) POST /api/leads/{id}/stage stage=Lost w/o lost_reason → 400 confirmed. (8) POST /api/leads as sales_executive with body.branch_id=<other branch> → saved lead has branch_id=sales_user.branch_id (auto-branch enforced) and assigned_to=self. Frontend Playwright (desktop 1920x1080): super_admin dashboard renders DateRangeFilter testid=dash-date-range-trigger; clicking dash-date-range-preset-month fires GET /api/analytics/summary?from_date=YYYY-MM-01&to_date=YYYY-MM-DD ✓. GujaratiCalendar widget renders with crawling marquee ticker ✓. Sidebar contains nav-reminders + nav-integrations ✓. /reminders renders buckets rem-overdue, rem-today, rem-day1 (rem-day2/rem-day3 absent only because seed has no leads due in those windows — correct, not a bug). /integrations renders int-api-key (masked), int-sender-id (SERV12), trigger-inquiry_created, trigger-delivery_completed, trigger-feedback_reminder, int-save-btn — save click persists without error. Sales_executive /leads/new: branch-auto-label='Bilimora · Auto' present, branch-select dropdown absent ✓.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/dashboard (super_admin)", "issues": ["Loss-analysis card testid is `loss-breakdown-card` with header text 'Loss analysis' / 'Why are we losing leads?' but the review request refers to it as 'Lost Analysis card'. The card renders lost_reason rows with % progress bars and data-testid=`loss-reason-<reason>` links to /leads?stage=Lost as specified — functional, only terminology mismatch. Consider renaming testid to `lost-analysis-card` for consistency with spec."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_p0.py",
+    "/app/test_reports/pytest/pytest_results_iter12.xml"
+  ],
+  "action_items": [
+    "NONE blocking. Iteration-12 P0 bundle is production-ready.",
+    "(Cosmetic) Align Dashboard loss-analysis-card testid naming with spec if desired.",
+    "(Carry-over, iter10-11) HIGH: Global-search dropdown z-index under sticky PageHeader blocks global-search-item clicks on desktop — not retested.",
+    "(Carry-over, iter10) MEDIUM: POST /api/users without phone → 500 (non-sparse unique index on users.phone)."
+  ],
+  "critical_code_review_comments": [
+    "server.py exchange-photos endpoint (L2463-2508) correctly whitelists doc_type to {photo, aadhaar, rc_book, front_photo, back_photo}; default falls back to 'photo' silently — acceptable but consider returning 400 on invalid doc_type for stricter contract.",
+    "server.py DELETE /leads/{lid}/exchange-photos/{file_id} (L2511-2534) scans BOTH photos[] and documents.* correctly; returns {ok: true/false} instead of 200/404 — should return 404 when file_id not found for clearer REST semantics; current behavior is OK but slightly loose.",
+    "server.py /settings/integrations GET returns masked key as '••••1234' (bullet char) — iOS/Android monospace OK but ensure UI pre-masks if user pastes a new key and doesn't rely on just the masked display. PUT accepts plain api_key and overwrites — good.",
+    "Dashboard.jsx lostBreakdown is rendered only when !isSales && lostBreakdown.length > 0 — correct gating; however the testid loss-breakdown-card doesn't match the spec's 'lost-analysis-card'. Functional parity confirmed.",
+    "Reminders.jsx BucketSection short-circuits when leads.length===0 — so rem-day2/rem-day3 sections don't mount when empty. UX-wise better to show an empty-state line ('No follow-ups scheduled') than to hide the bucket silently.",
+    "Integrations.jsx int-save-btn fires PUT /api/settings/integrations but UI doesn't clear the api-key input after save — user types TEST_KEY_ABCDEF1234 and then hitting save again re-sends the same key. Acceptable, but warning 'Leave empty to keep existing' is present (good)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_p0.py (NEW — 18 tests, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 iter-12 P0 tests)",
+    "frontend": "100% on iter-12 scope — DateRangeFilter→analytics summary call, GujaratiCalendar marquee, nav-reminders, nav-integrations, /reminders buckets, /integrations full form + save, sales /leads/new branch-auto-label (no branch-select), Loss analysis card link to /leads?stage=Lost"
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123, sales1@dealer.com/sales123 — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created 3 TEST_ prefixed leads during test run: TEST_IT12_Exchange (Exchange purchase_type lead for exchange-photos tests), TEST_IT12_Lost (fresh lead for Lost stage 400-check), TEST_IT12_AutoBranch (sales_executive-created to verify branch auto-assign). All non-destructive; do not touch seeded leads.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-12 regression base: /app/backend/tests/test_iter12_p0.py. New backend surface: (a) POST /api/leads/{lid}/exchange-photos?doc_type={aadhaar|rc_book|front_photo|back_photo|photo} — default photo[] for legacy; typed uploads land under exchange.documents.<bucket>[]. (b) DELETE /api/leads/{lid}/exchange-photos/{file_id} returns {ok: bool}. (c) GET /api/analytics/summary & /analytics/performance honor from_date & to_date (to_date auto-appends T23:59:59). (d) PUT /api/settings/integrations is super_admin-only. Frontend testids to remember: dash-date-range-trigger, dash-date-range-preset-{today|week|month|year|custom}, dash-date-range-panel; nav-reminders, nav-integrations; rem-overdue, rem-today, rem-day1, rem-day2, rem-day3 (only render when leads in bucket); int-api-key, int-sender-id, trigger-{inquiry_created|delivery_completed|feedback_reminder}, trigger-toggle-<key>, trigger-tpl-<key>, int-save-btn; branch-auto-label on LeadForm for sales_executive. Loss card testid is loss-breakdown-card (not lost-analysis-card as spec says). MOCKED behavior confirmed: 11za integration persists settings only — no outbound HTTP. Lead stage=Lost 400 enforcement already lived at server.py L1532; unchanged and verified.",
+  "rca of the issue": "No iter-12 bug found. Two minor discoveries during test authoring: (1) PRIORITIES enum is {Hot, Warm, Cold} — not 'Medium' — initial tests used 'Medium' and got 400; fixed to 'Warm'. (2) /api/analytics/performance row shape uses user_id (not id) for the exec identifier — noted and assertions adjusted accordingly."
+}
