@@ -1,5 +1,23 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-22 — Iteration 15: Split Capture/Upload Buttons + Aadhaar Front/Back
+**Scope**: Clearer mobile UX per upload slot.
+
+### Backend
+- `allowed_types` in `POST /api/leads/{lid}/exchange-photos` extended with `aadhaar_back` (separate bucket from `aadhaar`).
+
+### Frontend
+- **Two separate buttons** per slot (both `ExchangeSection.jsx` DocSlot and `LeadForm.jsx` StagedSlot):
+  - 📷 `*-capture-btn` → hidden input `*-capture-input` with `accept="image/*"` + `capture="environment"` (mobile rear camera)
+  - ⬆️ `*-upload-btn` → hidden input `*-upload-input` with `accept="image/*,application/pdf"` (or `image/*` for photo slots), NO capture attribute (gallery/file picker)
+- **Aadhaar split** into `Aadhaar Front` (`aadhaar` bucket) + `Aadhaar Back` (`aadhaar_back` bucket) — both mandatory.
+- **Mandatory count → 5**: Aadhaar Front + Aadhaar Back + RC Book + Front Photo + Back Photo (`Other Documents` still optional-multi).
+- Slots now use `h-10` button heights for larger mobile tap targets.
+- Re-capture/Re-upload labels when a single file is already present.
+
+### Test report
+`/app/test_reports/iteration_15.json` — **100% PASS** (11/11 backend + full frontend Playwright).
+
 ## 2026-04-22 — Iteration 14: Exchange Vehicle Complete Docs & Images System
 **Scope**: Full document/image upload pipeline during lead creation + restructured Exchange tab.
 
