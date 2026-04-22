@@ -86,6 +86,16 @@ code,
     color: #52525b;
 }
 
+/* Marquee ticker */
+@keyframes servall-marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: servall-marquee 45s linear infinite;
+  display: inline-block;
+}
+
 /* Mobile tap targets */
 @media (max-width: 640px) {
   button, .btn, [role="button"], input, select, textarea {

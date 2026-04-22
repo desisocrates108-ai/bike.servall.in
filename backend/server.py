@@ -1284,6 +1284,14 @@ async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
         raise HTTPException(400, "Invalid source")
     if body.priority not in PRIORITIES:
         raise HTTPException(400, "Invalid priority")
+    # Auto-branch assignment: sales_executive always uses own branch; admin uses own branch
+    if user["role"] == "sales_executive":
+        if not user.get("branch_id"):
+            raise HTTPException(400, "Your user is not mapped to a branch — contact admin")
+        body.branch_id = user["branch_id"]
+    elif user["role"] == "admin":
+        if user.get("branch_id"):
+            body.branch_id = user["branch_id"]
     branch = await db.branches.find_one({"id": body.branch_id}, {"_id": 0})
     if not branch:
         raise HTTPException(400, "Invalid branch")
@@ -1811,7 +1819,12 @@ async def download_file(fid: str, request: Request,
 # ============================================================
 
 @api.get("/analytics/summary")
-async def analytics_summary(branch_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+async def analytics_summary(
+    branch_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
     base: Dict[str, Any] = {}
     if user["role"] == "sales_executive":
         base["assigned_to"] = user["id"]
@@ -1819,6 +1832,13 @@ async def analytics_summary(branch_id: Optional[str] = None, user: dict = Depend
         base["branch_id"] = user.get("branch_id")
     elif user["role"] == "super_admin" and branch_id:
         base["branch_id"] = branch_id
+    if from_date or to_date:
+        rng: Dict[str, Any] = {}
+        if from_date:
+            rng["$gte"] = from_date
+        if to_date:
+            rng["$lte"] = f"{to_date}T23:59:59"
+        base["created_at"] = rng
 
     total = await db.leads.count_documents(base)
 
@@ -1879,7 +1899,12 @@ async def analytics_summary(branch_id: Optional[str] = None, user: dict = Depend
 
 
 @api.get("/analytics/performance")
-async def analytics_performance(branch_id: Optional[str] = None, user: dict = Depends(require_roles("super_admin", "admin"))):
+async def analytics_performance(
+    branch_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: dict = Depends(require_roles("super_admin", "admin")),
+):
     """Per sales-executive performance metrics."""
     user_q: Dict[str, Any] = {"role": "sales_executive"}
     lead_base: Dict[str, Any] = {}
@@ -1889,6 +1914,13 @@ async def analytics_performance(branch_id: Optional[str] = None, user: dict = De
     elif user["role"] == "super_admin" and branch_id:
         user_q["branch_id"] = branch_id
         lead_base["branch_id"] = branch_id
+    if from_date or to_date:
+        rng: Dict[str, Any] = {}
+        if from_date:
+            rng["$gte"] = from_date
+        if to_date:
+            rng["$lte"] = f"{to_date}T23:59:59"
+        lead_base["created_at"] = rng
 
     execs = await db.users.find(user_q, {"_id": 0, "password_hash": 0}).to_list(1000)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -3047,6 +3079,76 @@ async def create_template(body: WATemplateIn, user: dict = Depends(require_roles
     await db.wa_templates.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@api.get("/settings/integrations")
+async def get_integrations(user: dict = Depends(require_roles("super_admin", "admin"))):
+    doc = await db.settings.find_one({"_key": "integrations"}, {"_id": 0}) or {}
+    # Never return the actual api key value verbatim in plaintext; show masked if set
+    api_key = doc.get("elevenza_api_key") or ""
+    masked = ("•" * max(0, len(api_key) - 4)) + api_key[-4:] if api_key else ""
+    return {
+        "elevenza_api_key_set": bool(api_key),
+        "elevenza_api_key_masked": masked,
+        "elevenza_sender_id": doc.get("elevenza_sender_id") or "",
+        "triggers": doc.get("triggers") or {
+            "inquiry_created": {"enabled": False, "template_id": None},
+            "delivery_completed": {"enabled": False, "template_id": None},
+            "feedback_reminder": {"enabled": False, "template_id": None},
+        },
+    }
+
+
+class IntegrationSettings(BaseModel):
+    elevenza_api_key: Optional[str] = None
+    elevenza_sender_id: Optional[str] = None
+    triggers: Optional[Dict[str, Any]] = None
+
+
+@api.put("/settings/integrations")
+async def put_integrations(body: IntegrationSettings, user: dict = Depends(require_roles("super_admin"))):
+    doc = await db.settings.find_one({"_key": "integrations"}, {"_id": 0}) or {"_key": "integrations"}
+    if body.elevenza_api_key is not None:
+        doc["elevenza_api_key"] = body.elevenza_api_key
+    if body.elevenza_sender_id is not None:
+        doc["elevenza_sender_id"] = body.elevenza_sender_id
+    if body.triggers is not None:
+        doc["triggers"] = body.triggers
+    doc["updated_at"] = now_iso()
+    await db.settings.update_one({"_key": "integrations"}, {"$set": doc}, upsert=True)
+    return {"ok": True}
+
+
+class BulkSendIn(BaseModel):
+    lead_ids: List[str]
+    template_id: str
+
+
+@api.post("/wa/bulk-send")
+async def wa_bulk_send(body: BulkSendIn, user: dict = Depends(require_roles("super_admin", "admin"))):
+    tpl = await db.wa_templates.find_one({"id": body.template_id}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(404, "Template not found")
+    sent = 0
+    for lid in body.lead_ids:
+        lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+        if not lead:
+            continue
+        if user["role"] == "admin" and lead.get("branch_id") != user.get("branch_id"):
+            continue
+        # Queue a mock outbound send log
+        await db.wa_messages.insert_one({
+            "id": str(uuid.uuid4()),
+            "lead_id": lid,
+            "template_id": body.template_id,
+            "direction": "out",
+            "status": "queued_mock",
+            "body": (tpl.get("body") or "").replace("{{customer_name}}", lead.get("customer_name") or ""),
+            "created_at": now_iso(),
+            "created_by": user["id"],
+        })
+        sent += 1
+    return {"ok": True, "sent": sent}
 
 
 @api.put("/wa-templates/{tid}")

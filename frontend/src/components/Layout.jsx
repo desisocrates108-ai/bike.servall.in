@@ -48,8 +48,8 @@ export default function Layout({ children }) {
   const isSales = user?.role === "sales_executive";
 
   const SideNav = (
-    <div className="flex flex-col h-full bg-white">
-      <div className="px-5 py-5 border-b border-zinc-200">
+    <div className="flex flex-col h-full max-h-screen bg-white">
+      <div className="px-5 py-5 border-b border-zinc-200 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 bg-brand rounded-sm flex items-center justify-center flex-shrink-0">
             <Bike className="w-5 h-5 text-white" strokeWidth={2} />
@@ -65,7 +65,7 @@ export default function Layout({ children }) {
         </div>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 min-h-0 p-3 space-y-1 overflow-y-auto" data-testid="sidebar-scroll">
         <NavLink to="/dashboard" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-dashboard">
           <LayoutDashboard className="w-4 h-4" strokeWidth={1.75} /> {t("nav.dashboard")}
         </NavLink>
@@ -123,7 +123,7 @@ export default function Layout({ children }) {
         )}
       </nav>
 
-      <div className="p-3 border-t border-zinc-200">
+      <div className="p-3 border-t border-zinc-200 flex-shrink-0">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="w-9 h-9 bg-brand text-white rounded-sm flex items-center justify-center font-semibold uppercase text-sm">
             {user?.name?.[0] || "U"}
