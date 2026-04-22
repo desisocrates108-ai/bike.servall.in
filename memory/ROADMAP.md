@@ -1,9 +1,9 @@
 # ROADMAP — Servall CRM
 
-## ✅ Shipped (Iterations 8-9)
+## ✅ Shipped (Iterations 8-12)
 - Mobile-first UI (hamburger + bottom nav + cards + tap targets)
 - Global back buttons via `PageHeader`
-- Strict form-gated funnel (Allotment stage added)
+- Strict form-gated funnel (Allotment stage added; mandatory Lost reason UI-enforced)
 - Role-based dashboards (Sales/Admin/CEO) — fully clickable drill-down
 - **Emergent badge removed** from UI
 - Branch detail page `/branches/:id` with funnel/team/loss charts
@@ -12,8 +12,12 @@
 - Interactive guide button (react-joyride)
 - PWA (manifest + SW + icons)
 - Bilingual EN/GU
+- **Iter-12**: DateRangeFilter on Dashboard; Gujarati Calendar widget (static festivals); Reminders page (buckets overdue/today/1-3 days); Integrations page (11za mock UI + triggers); Exchange multi-document upload (Aadhaar + RC + Front + Back — 4 mandatory slots); Loss analysis breakdown card; Sales exec auto-branch UI (branch dropdown hidden)
 
 ## 🔴 P1 — Next
+- [ ] Real 11za WhatsApp API (replace mock — currently purely UI/DB toggle)
+- [ ] Global-search dropdown z-index under sticky PageHeader blocks clicks on desktop (iter-10 carry-over)
+- [ ] Non-sparse unique index on `users.phone` — POST /api/users without phone returns 500 (iter-10 carry-over)
 - [ ] Explicit 403 for cross-branch `?branch_id=<other>` attempts (currently silently filtered)
 - [ ] Server-side aggregation for `/api/branches/{id}/performance` (include funnel + loss_reasons + sources to avoid client-side aggregation over large lead lists)
 - [ ] Pagination / top-N on Team perf table when >50 users

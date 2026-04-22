@@ -1,5 +1,30 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-22 — Iteration 12: Wiring + Forms + Exchange Multi-Upload (P0 Bundle)
+**Scope**: Complete the in-progress Iteration 12. All P0 items shipped + tested (18/18 backend + full frontend Playwright PASS).
+
+### Backend
+1. Extended `POST /api/leads/{lid}/exchange-photos` to accept `doc_type` query param ∈ {photo, aadhaar, rc_book, front_photo, back_photo}. Typed uploads land in `lead.exchange.documents.<bucket>[]`; default `photo` stays in `exchange.photos[]` (backward-compat preserved).
+2. Added `DELETE /api/leads/{lid}/exchange-photos/{file_id}` — removes from both `photos[]` and `documents.*` and sets file `is_deleted=true`.
+3. Verified `POST /api/leads/{lid}/stage` — stage=Lost without `lost_reason` returns 400 (pre-existing).
+4. Verified `POST /api/leads` as `sales_executive` ignores body `branch_id` and auto-assigns user's own branch + assigns lead to self (pre-existing).
+5. `GET /api/analytics/summary` + `/analytics/performance` `from_date`/`to_date` filters confirmed working.
+
+### Frontend
+- **Routes wired**: `/reminders` (all roles) + `/integrations` (super_admin + admin).
+- **Sidebar nav**: `nav-reminders` (all roles) + `nav-integrations` (admin section).
+- **Dashboard wiring**:
+  - `DateRangeFilter` (today/week/month/year/all/custom) in header — feeds `/analytics/summary` + `/analytics/performance`.
+  - `GujaratiCalendar` widget for super_admin + admin with crawling ticker, upcoming festivals, upcoming deliveries, past 14-day stats.
+  - **Loss-analysis breakdown** card: per-`lost_reason` counts + % bars + links → `/leads?stage=Lost` (replaces plain loss card).
+- **LeadForm.jsx**: `sales_executive` sees read-only `branch-auto-label` (auto-assigned branch) instead of branch dropdown.
+- **LeadDetail.jsx**: Change-Stage `Confirm` button disabled until `lost_reason` picked; picking `Other` additionally requires `lost_reason_text`.
+- **ExchangeSection.jsx**: new 4-slot `DocSlot` grid (Aadhaar, RC Book, Vehicle Front, Vehicle Back) with progress indicator (X/4), per-slot upload+delete. Existing `Additional Photos` section retained for extras.
+- i18n (en + gu) keys added: `nav.reminders`, `nav.integrations`.
+
+### Test report
+`/app/test_reports/iteration_12.json` — **100% PASS** (18/18 backend + full frontend Playwright). No regressions.
+
 ## 2026-04-21 — Iteration 11: CEO + Sales Manager Compliance Audit
 **Scope**: Full requirements audit against user's CEO + Sales Manager specs. Identified 5 gaps and shipped fixes.
 
