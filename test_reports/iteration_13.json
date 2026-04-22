@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration-13 Gujarati Calendar interactive popup validated end-to-end. Backend pytest 15/15 PASS at /app/backend/tests/test_iter13_calendar.py covering GET /api/analytics/calendar: (a) 200 for super_admin/admin/sales_executive with {year, month, days:{YYYY-MM-DD:{deliveries,followups,upcoming,overdue}}} schema; (b) 400 for year∉[2024,2035] and month∉[1,12] (4 parametrized); (c) 422 for missing year/month; (d) 401 for unauthenticated; (e) super_admin branch_id filter accepted; (f) sales scope → every lead_id returned belongs to sales_executive's own leads across Jan-Mar 2026; (g) admin scope → every lead_id belongs to admin's branch lead set; (h) buckets are lists of dicts; (i) no cross-month date leakage (March query only returns 2026-03-* keys). Frontend Playwright (desktop 1920x1080 + mobile 390x844) on super_admin dashboard: calendar-open-btn opens calendar-dialog ✓. Header shows 'Gujarati Calendar'+'April 2026'. Legend renders all 5 LegendDot colors (green/blue/yellow/red/purple). Month grid has 7-col weekday header + 30 day cells (cal-day-YYYY-MM-DD) for April 2026; counts of cal-dot-{green:3, blue:3, yellow:7, red:2, purple:3} rendered. cal-prev/cal-next decrement/increment month ✓. cal-today jumps to today and auto-selects → cal-day-detail view opens ✓. Clicking cal-day-2026-04-17 (day with non-festival events) → cal-day-detail visible, header switches to 'Day Detail'+'Sunday, 17 April 2026', cal-back-btn visible (prev/next/today hidden). cal-back-btn returns to month-view, prev/next/today re-appear, back-btn hidden, selectedDate cleared ✓. Lead row link click → navigates to /leads/{id} AND dialog closes ✓. Empty days (no events, not today) rendered as disabled buttons — clicking blocked by HTML disabled attr (spec-compliant). cal-close button closes dialog ✓. Escape key closes dialog ✓. Mobile (390x844): dialog width = 370.5px ≈ 95vw ✓, scrollable, all interactions work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CalendarDialog (Radix a11y)", "issues": ["Console emits two errors + two warnings each open: '`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users' and 'Missing `Description` or `aria-describedby={undefined}` for {DialogContent}'. Non-blocking (dialog functions correctly) but should be fixed by adding DialogTitle/DialogDescription (optionally wrapped in VisuallyHidden from @radix-ui/react-visually-hidden) inside CalendarDialog's DialogContent for WCAG compliance."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_calendar.py",
+    "/app/test_reports/pytest/pytest_results_iter13.xml"
+  ],
+  "action_items": [
+    "(LOW/a11y) Wrap CalendarDialog header title in <DialogTitle> (and add <DialogDescription>) — currently custom <div> elements, causing Radix a11y console errors on every open. No functional impact.",
+    "(Carry-over, iter10-11) HIGH: Global-search dropdown z-index issue — not retested.",
+    "(Carry-over, iter10) MEDIUM: POST /api/users without phone → 500."
+  ],
+  "critical_code_review_comments": [
+    "server.py /analytics/calendar (L1901-2015): scoping logic is correct — builds accessible_lead_ids via find projection (no _id), uses in_scope() gate on every bucket insert. Note: deliveries collection query doesn't use lead_scope; relies solely on in_scope() filter which is fine but slightly inefficient vs filtering in Mongo.",
+    "server.py L1992 overdue_stages=['Lost','Delivery','Registration','Feedback'] excluded via $nin — correct but should consider 'Cancelled' stage if present in system.",
+    "CalendarDialog.jsx: data-testid cal-dot-{color} is emitted for every dot in every cell with events — when testing 'count >= 1 for color X' this means the TEST query matches cells with green dots across the whole grid; cardinality is fine and matches spec.",
+    "CalendarDialog.jsx clicking an empty non-today cell does nothing — implemented via button[disabled]; spec says 'Empty day shows cal-day-empty' — cal-day-empty only shows when you click a day WITH events but all buckets are zero (e.g., festival-only days will NOT show cal-day-empty because fests count). This is the correct behavior; but pure-empty cells are unclickable, so cal-day-empty is effectively only reachable via cal-today if today has no events.",
+    "CalendarDialog.jsx uses DialogContent without DialogTitle/DialogDescription → triggers Radix a11y console errors (see design_issues).",
+    "GujaratiCalendar.jsx passes branchId to CalendarDialog — CEO dashboard wiring confirmed functional (dialog query includes branch_id when provided).",
+    "Festivals list lives client-side in /lib/festivals.js — good for no-API-roundtrip festival rendering; ensure 2028+ dates are added before year rolls over."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter13_calendar.py (NEW — 15 tests, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 iter-13 calendar tests)",
+    "frontend": "100% on iter-13 scope — calendar-open-btn, calendar-dialog, legend, cal-grid, cal-dot-{green|blue|yellow|red|purple}, cal-prev/next/today, cal-back-btn, cal-day-detail, sec-festivals, LeadRow navigation to /leads/{id}, cal-close, Escape, mobile 95vw"
+  },
+  "test_credentials": "superadmin@dealer.com/super123, admin@dealer.com/admin123, sales1@dealer.com/sales123 — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "No new seed data for iter-13. Used existing dataset (218 leads, deliveries, bookings, followups already seeded).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-13 regression base: /app/backend/tests/test_iter13_calendar.py. New surface: GET /api/analytics/calendar?year=&month=&branch_id=. Year range validation is 2024-2035 (not >=current year) — update assertions accordingly. Response shape: {year, month, days:{YYYY-MM-DD:{deliveries:[{lead_id,customer_name,phone,chassis}], followups:[{lead_id,customer_name,phone,stage,type,done,outcome}], upcoming:[{lead_id,customer_name,phone,stage,booking_id,status}], overdue:[{lead_id,customer_name,phone,stage,priority,followup_time,followup_type}]}}}. Frontend testids: calendar-open-btn (on GujaratiCalendar widget), calendar-dialog, cal-back-btn, cal-prev, cal-next, cal-today, cal-close, cal-month-view, cal-grid, cal-day-YYYY-MM-DD, cal-dot-{green|blue|yellow|red|purple}, cal-day-detail, cal-day-empty, cal-loading, sec-{festivals|deliveries|overdue|upcoming|followups}, del-/over-/up-/fu-/fest- row testids. Known Radix a11y console errors (DialogTitle/Description missing) — non-blocking. Empty non-today cells are <button disabled> (not clickable). cal-day-empty only renders when selected date has 0 events AND 0 festivals.",
+  "rca of the issue": "No iter-13 bug. Notable test-authoring finding: environment's REACT_APP_BACKEND_URL must be passed as env var to pytest (not auto-loaded) — iter-12 test file had an assert on BASE_URL which would have surfaced this earlier; iter-13 file added same guard pattern implicitly via failed URL resolution, re-ran with env → all 15 pass."
+}

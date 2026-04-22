@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { FESTIVALS, upcomingFestivals, pastFestivals, daysUntil } from "../lib/festivals";
 import { Calendar as CalIcon, CalendarDays, CheckCircle2, Flame, Package, Star } from "lucide-react";
+import CalendarDialog from "./CalendarDialog";
 
 /**
  * Gujarati Calendar Widget (for CEO / Branch Admin).
@@ -10,11 +11,13 @@ import { Calendar as CalIcon, CalendarDays, CheckCircle2, Flame, Package, Star }
  *   - Upcoming festivals + deliveries/bookings
  *   - Past week: completed deliveries + follow-ups
  *   - Crawling marquee ticker
+ *   - Click the calendar icon to open interactive month grid popup
  */
-export default function GujaratiCalendar() {
+export default function GujaratiCalendar({ branchId = "" }) {
   const { t } = useTranslation();
   const [leads, setLeads] = useState([]);
   const [followups, setFollowups] = useState([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     api.get("/leads", { params: { page_size: 500 } }).then((r) => setLeads(r.data || [])).catch(() => {});
@@ -96,8 +99,17 @@ export default function GujaratiCalendar() {
 
       <div className="p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-4">
-          <CalIcon className="w-4 h-4 text-brand" />
-          <div className="overline">Gujarati Calendar</div>
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="flex items-center gap-2 px-2 py-1 -ml-2 rounded-sm hover:bg-brand/5 active:bg-brand/10 transition-colors group"
+            data-testid="calendar-open-btn"
+            aria-label="Open calendar"
+          >
+            <CalIcon className="w-4 h-4 text-brand" />
+            <div className="overline group-hover:text-brand">Gujarati Calendar</div>
+            <span className="text-[10px] text-zinc-400 group-hover:text-brand font-semibold ml-1">· Tap to view month</span>
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -169,6 +181,8 @@ export default function GujaratiCalendar() {
           </div>
         </div>
       </div>
+
+      <CalendarDialog open={dialogOpen} onOpenChange={setDialogOpen} branchId={branchId} />
     </div>
   );
 }

@@ -1898,6 +1898,125 @@ async def analytics_summary(
     }
 
 
+@api.get("/analytics/calendar")
+async def analytics_calendar(
+    year: int,
+    month: int,
+    branch_id: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    """Month-wise calendar events for Gujarati Calendar popup.
+    Returns a map keyed by YYYY-MM-DD with deliveries / followups / upcoming / overdue lists.
+    """
+    if not (1 <= month <= 12) or year < 2024 or year > 2035:
+        raise HTTPException(400, "Invalid year/month")
+    # Build month range
+    start_iso = f"{year:04d}-{month:02d}-01"
+    if month == 12:
+        next_month_start = f"{year + 1:04d}-01-01"
+    else:
+        next_month_start = f"{year:04d}-{month + 1:02d}-01"
+
+    # Scope
+    lead_scope: Dict[str, Any] = {}
+    if user["role"] == "sales_executive":
+        lead_scope["assigned_to"] = user["id"]
+    elif user["role"] == "admin":
+        lead_scope["branch_id"] = user.get("branch_id")
+    elif user["role"] == "super_admin" and branch_id:
+        lead_scope["branch_id"] = branch_id
+
+    accessible_lead_ids: Optional[set] = None
+    if lead_scope:
+        cur = db.leads.find(lead_scope, {"_id": 0, "id": 1})
+        accessible_lead_ids = set()
+        async for l in cur:
+            accessible_lead_ids.add(l["id"])
+
+    def in_scope(lid: str) -> bool:
+        return accessible_lead_ids is None or lid in accessible_lead_ids
+
+    days: Dict[str, Dict[str, list]] = {}
+
+    def bucket(date_str: str) -> Dict[str, list]:
+        if date_str not in days:
+            days[date_str] = {"deliveries": [], "followups": [], "upcoming": [], "overdue": []}
+        return days[date_str]
+
+    # 1) Deliveries done — from `deliveries` collection
+    del_q: Dict[str, Any] = {"delivery_date": {"$gte": start_iso, "$lt": next_month_start}}
+    async for d in db.deliveries.find(del_q, {"_id": 0}):
+        if not in_scope(d.get("lead_id", "")):
+            continue
+        lead = await db.leads.find_one({"id": d.get("lead_id")}, {"_id": 0, "customer_name": 1, "phone": 1, "id": 1})
+        bucket(d["delivery_date"])["deliveries"].append({
+            "lead_id": d.get("lead_id"),
+            "customer_name": (lead or {}).get("customer_name", "—"),
+            "phone": (lead or {}).get("phone"),
+            "chassis": d.get("chassis_number"),
+        })
+
+    # 2) Followups (scheduled/done) — by scheduled_date
+    fu_q: Dict[str, Any] = {"scheduled_date": {"$gte": start_iso, "$lt": next_month_start}}
+    async for f in db.followups.find(fu_q, {"_id": 0}):
+        if not in_scope(f.get("lead_id", "")):
+            continue
+        lead = await db.leads.find_one({"id": f.get("lead_id")}, {"_id": 0, "customer_name": 1, "phone": 1, "stage": 1})
+        bucket(f["scheduled_date"])["followups"].append({
+            "lead_id": f.get("lead_id"),
+            "customer_name": (lead or {}).get("customer_name", "—"),
+            "phone": (lead or {}).get("phone"),
+            "stage": (lead or {}).get("stage"),
+            "type": f.get("type"),
+            "done": bool(f.get("done")),
+            "outcome": f.get("outcome_tag"),
+        })
+
+    # 3) Upcoming deliveries — bookings with expected_delivery_date in range
+    bk_q: Dict[str, Any] = {"expected_delivery_date": {"$gte": start_iso, "$lt": next_month_start}}
+    async for bk in db.bookings.find(bk_q, {"_id": 0}):
+        if not in_scope(bk.get("lead_id", "")):
+            continue
+        lead = await db.leads.find_one({"id": bk.get("lead_id")}, {"_id": 0, "customer_name": 1, "phone": 1, "stage": 1})
+        bucket(bk["expected_delivery_date"])["upcoming"].append({
+            "lead_id": bk.get("lead_id"),
+            "customer_name": (lead or {}).get("customer_name", "—"),
+            "phone": (lead or {}).get("phone"),
+            "stage": (lead or {}).get("stage"),
+            "booking_id": bk.get("id"),
+            "status": bk.get("status"),
+        })
+
+    # 4) Overdue / upcoming from leads.next_followup_date within range
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    overdue_stages = ["Lost", "Delivery", "Registration", "Feedback"]
+    lead_fu_q: Dict[str, Any] = {
+        "next_followup_date": {"$gte": start_iso, "$lt": next_month_start},
+        "stage": {"$nin": overdue_stages},
+        **lead_scope,
+    }
+    async for l in db.leads.find(lead_fu_q, {"_id": 0}):
+        is_overdue = l.get("next_followup_date") and l["next_followup_date"] < today
+        key = "overdue" if is_overdue else "upcoming"
+        bucket(l["next_followup_date"])[key].append({
+            "lead_id": l.get("id"),
+            "customer_name": l.get("customer_name", "—"),
+            "phone": l.get("phone"),
+            "stage": l.get("stage"),
+            "priority": l.get("priority"),
+            "followup_time": l.get("next_followup_time"),
+            "followup_type": l.get("next_followup_type"),
+        })
+
+    return {
+        "year": year,
+        "month": month,
+        "days": days,
+    }
+
+
+
+
 @api.get("/analytics/performance")
 async def analytics_performance(
     branch_id: Optional[str] = None,

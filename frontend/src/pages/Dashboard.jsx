@@ -270,7 +270,7 @@ export default function Dashboard() {
 
             {/* Gujarati Calendar widget */}
             <div className="mb-4" data-testid="dash-calendar-wrap">
-              <GujaratiCalendar />
+              <GujaratiCalendar branchId={branchFilter} />
             </div>
           </div>
         )}
