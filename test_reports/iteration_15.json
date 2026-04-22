@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration-15 Exchange Vehicle Split Upload + Aadhaar-split tested end-to-end. Backend pytest 11/11 PASS in /app/backend/tests/test_iter15_aadhaar_back.py — (1) NEW POST /api/leads/{lid}/exchange-photos?doc_type=aadhaar_back accepts JPG+PDF and persists into exchange.documents.aadhaar_back[] (verified via GET), separate bucket from aadhaar (front), (2) regression for aadhaar/rc_book/front_photo/back_photo/other all route correctly, default+invalid fall back to photos[], (3) DELETE from aadhaar_back bucket returns {ok:true} and removes. Frontend Playwright (desktop 1920x4000, super_admin): /leads/new → Exchange Vehicle renders `Vehicle Documents & Images` with 3 identity slots (staged-aadhaar, staged-aadhaar-back, staged-rc-book), 2 photo slots (staged-front, staged-back), 1 multi `Other Documents` (staged-other). Each slot has TWO visible buttons (-capture-btn + -upload-btn) + two hidden inputs: *-capture-input has capture=environment & accept=image/*; *-upload-input has NO capture attr, accept=image/*,application/pdf for doc slots & aadhaar/rc_book/other, accept=image/* for front/back (imageOnly). Staged 5 mandatory JPGs (aadhaar via upload-input, aadhaar-back via capture-input, rc-book via upload-input, front via capture-input, back via capture-input) → staged-progress = '✅ All 5 mandatory files staged'. Added PDF to staged-other-upload-input → '✅ All 5 mandatory files staged · +1 other'. Submit → POST /api/leads (1x) + 6x POST /api/leads/{id}/exchange-photos with doc_type in {aadhaar, aadhaar_back, rc_book, front_photo, back_photo, other} → redirected to /leads/{id}. Exchange tab on LeadDetail renders exch-doc-progress='✅ All 5 mandatory documents uploaded · +1 other' ('5 mandatory' wording confirmed), all 6 slots (slot-aadhaar, slot-aadhaar-back, slot-rc-book, slot-front, slot-back, slot-other) each with working capture-btn + upload-btn, capture-input has capture=environment, upload-input has no capture. Deletion via slot-other-del-<fid> removes the file (toast 'Deleted' shown). All 5 mandatory + 1 optional slot match spec. No blocking bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_aadhaar_back.py",
+    "/app/test_reports/pytest/pytest_results_iter15.xml"
+  ],
+  "action_items": [
+    "NONE blocking for iter-15. Production-ready.",
+    "(Carry-over iter-14, LOW) Potential memory leak — stagedFiles URL.createObjectURL previews in LeadForm.jsx StagedSlot not revoked on onRemove/unmount.",
+    "(Carry-over iter-14, LOW) exch-doc-progress briefly lags after a new upload (onReload race).",
+    "(Carry-over iter-13, LOW/a11y) CalendarDialog missing DialogTitle/DialogDescription → Radix console warning.",
+    "(Carry-over iter-10-11, HIGH) Global-search dropdown z-index under sticky PageHeader — not retested in iter-15.",
+    "(Carry-over iter-10, MEDIUM) POST /api/users without phone → 500 (non-sparse unique index)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L2592 allowed_types now includes 'aadhaar_back' alongside 'photo', 'aadhaar', 'rc_book', 'front_photo', 'back_photo', 'other' — correct.",
+    "ExchangeSection.jsx DocSlot (L377+) and LeadForm.jsx StagedSlot (L486+) both refactored to expose two independent hidden inputs (captureRef + uploadRef) and two visible Buttons. Clean symmetry between staged (pre-create) and persisted (post-create) paths. data-testid naming convention is consistent: <slot>-capture-btn, <slot>-capture-input, <slot>-upload-btn, <slot>-upload-input.",
+    "StagedSlot still calls URL.createObjectURL without a matching revokeObjectURL in onRemove or component cleanup — minor memory leak (carry-over from iter-14).",
+    "LeadForm.jsx submit() loops Object.entries(stagedFiles).flatMap(...) in key insertion order {aadhaar, aadhaar_back, rc_book, front_photo, back_photo, other} — stable and correct. Per-file try/catch swallows individual failures but keeps the batch going (documented trade-off from iter-14).",
+    "ExchangeSection.jsx L248-340: 'Vehicle Documents & Images' card right-aligns '5 mandatory slots' badge now (updated from '4'); progress calculator correctly counts 5 mandatory buckets (aadhaar + aadhaar_back + rc_book + front_photo + back_photo) + any other[] count. Wording changed to 'All 5 mandatory documents uploaded' which the test matched via substring '5 mandatory'.",
+    "Backward-compat preserved: unknown doc_type still falls back to exchange.photos[] (photo) and returns 200 — fine for current frontend but consider stricter 400 for new code paths (already flagged in iter-12/14).",
+    "imageOnly flag on front_photo/back_photo correctly drives upload-input accept='image/*' (no PDF), while aadhaar/aadhaar_back/rc_book/other accept 'image/*,application/pdf' — verified programmatically."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter15_aadhaar_back.py (NEW — 11 tests, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 iter-15 tests PASS)",
+    "frontend": "100% on iter-15 scope — 6 slots × 2 buttons × 2 inputs all wired correctly (capture vs upload), staged-progress 5/5 + other badge, 1 POST /api/leads + 6 POST /exchange-photos fired with correct doc_type params, LeadDetail Exchange tab shows all 6 slots + 5-mandatory progress line + working delete"
+  },
+  "test_credentials": "superadmin@dealer.com/super123 — sourced from /app/memory/test_credentials.md. Branch 'Amalsad' selected during E2E run.",
+  "seed_data_creation": "~2 TEST_ prefixed leads created: 1 from pytest fixture (TEST_IT15_Exch_*, Exchange Vehicle), 1 from Playwright E2E (TEST_IT15_E2E, Exchange Vehicle, 6 files uploaded). Non-destructive; no seeded data mutated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-15 regression base: /app/backend/tests/test_iter15_aadhaar_back.py. Exchange document buckets = {aadhaar, aadhaar_back, rc_book, front_photo, back_photo, other}; default/unknown doc_type → photos[]. Frontend testids — LeadForm /leads/new: staged-{aadhaar|aadhaar-back|rc-book|front|back|other} + each with -capture-btn / -capture-input / -upload-btn / -upload-input / -del-<i>; staged-progress uses '5 mandatory files staged' wording. LeadDetail /leads/{id} → tab-exchange: slot-{aadhaar|aadhaar-back|rc-book|front|back|other} with same 4 testid suffix + -del-<fid>; exch-doc-progress uses '5 mandatory documents uploaded' wording. Branch (POS) is required for super_admin (validation blocks submit silently if unselected — not a bug, expected). Known non-blocking carry-overs: ObjectURL preview leak, progress refresh lag, toast doesn't surface per-file upload failures.",
+  "rca of the issue": "No iter-15 bug found. Minor test-authoring learning: super_admin must pick a branch before submit (required validation) — initially my playwright run skipped branch-select so POST /api/leads never fired (0 uploads). Fixed by clicking branch-select and selecting first option ('Amalsad')."
+}

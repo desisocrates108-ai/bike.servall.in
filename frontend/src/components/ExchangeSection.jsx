@@ -247,18 +247,29 @@ export default function ExchangeSection({ lead, constants, onReload }) {
 
       <Card
         title="Vehicle Documents & Images"
-        right={<span className="text-xs text-zinc-500">Mandatory: Aadhaar · RC · Front · Back</span>}
+        right={<span className="text-xs text-zinc-500">5 mandatory slots</span>}
       >
-        {/* Documents block — Aadhaar + RC Book + Other */}
-        <div className="overline mb-2">Documents</div>
+        {/* Documents block */}
+        <div className="overline mb-2">Identity & Ownership Documents</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5" data-testid="exch-doc-slots">
           <DocSlot
-            label="Aadhaar Card"
+            label="Aadhaar Front"
             testid="slot-aadhaar"
             docType="aadhaar"
             required
+            imageOnly={false}
             fileIds={documents.aadhaar || []}
             onUpload={(f) => uploadPhoto(f, "aadhaar")}
+            onDelete={deleteFile}
+          />
+          <DocSlot
+            label="Aadhaar Back"
+            testid="slot-aadhaar-back"
+            docType="aadhaar_back"
+            required
+            imageOnly={false}
+            fileIds={documents.aadhaar_back || []}
+            onUpload={(f) => uploadPhoto(f, "aadhaar_back")}
             onDelete={deleteFile}
           />
           <DocSlot
@@ -266,31 +277,22 @@ export default function ExchangeSection({ lead, constants, onReload }) {
             testid="slot-rc-book"
             docType="rc_book"
             required
+            imageOnly={false}
             fileIds={documents.rc_book || []}
             onUpload={(f) => uploadPhoto(f, "rc_book")}
             onDelete={deleteFile}
           />
-          <DocSlot
-            label="Other Documents"
-            testid="slot-other"
-            docType="other"
-            multi
-            fileIds={documents.other || []}
-            onUpload={(f) => uploadPhoto(f, "other")}
-            onDelete={deleteFile}
-          />
         </div>
 
-        {/* Vehicle Photos — Front + Back with camera support */}
+        {/* Vehicle Photos block */}
         <div className="overline mb-2">Vehicle Photos</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="exch-photo-slots">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5" data-testid="exch-photo-slots">
           <DocSlot
             label="Front Photo"
             testid="slot-front"
             docType="front_photo"
             required
             imageOnly
-            camera
             fileIds={documents.front_photo || []}
             onUpload={(f) => uploadPhoto(f, "front_photo")}
             onDelete={deleteFile}
@@ -301,26 +303,39 @@ export default function ExchangeSection({ lead, constants, onReload }) {
             docType="back_photo"
             required
             imageOnly
-            camera
             fileIds={documents.back_photo || []}
             onUpload={(f) => uploadPhoto(f, "back_photo")}
             onDelete={deleteFile}
           />
         </div>
 
+        {/* Other Documents */}
+        <div className="overline mb-2">Other Documents (optional)</div>
+        <DocSlot
+          label="Other Documents"
+          testid="slot-other"
+          docType="other"
+          multi
+          imageOnly={false}
+          fileIds={documents.other || []}
+          onUpload={(f) => uploadPhoto(f, "other")}
+          onDelete={deleteFile}
+        />
+
         <div className="mt-4 text-xs">
           {(() => {
             const done =
               (documents.aadhaar?.length ? 1 : 0) +
+              (documents.aadhaar_back?.length ? 1 : 0) +
               (documents.rc_book?.length ? 1 : 0) +
               (documents.front_photo?.length ? 1 : 0) +
               (documents.back_photo?.length ? 1 : 0);
             const otherN = (documents.other || []).length;
             return (
-              <div className={`font-bold ${done === 4 ? "text-emerald-700" : "text-amber-700"}`} data-testid="exch-doc-progress">
-                {done === 4
-                  ? `✅ All 4 mandatory documents uploaded${otherN ? ` · +${otherN} other` : ""}`
-                  : `⚠️ ${done}/4 mandatory documents — all required${otherN ? ` · +${otherN} other` : ""}`}
+              <div className={`font-bold ${done === 5 ? "text-emerald-700" : "text-amber-700"}`} data-testid="exch-doc-progress">
+                {done === 5
+                  ? `✅ All 5 mandatory documents uploaded${otherN ? ` · +${otherN} other` : ""}`
+                  : `⚠️ ${done}/5 mandatory documents — all required${otherN ? ` · +${otherN} other` : ""}`}
               </div>
             );
           })()}
@@ -359,17 +374,16 @@ export default function ExchangeSection({ lead, constants, onReload }) {
   );
 }
 
-function DocSlot({ label, testid, docType, imageOnly, camera, multi, required, fileIds, onUpload, onDelete }) {
-  const ref = useRef(null);
+function DocSlot({ label, testid, docType, imageOnly, multi, required, fileIds, onUpload, onDelete }) {
+  const captureRef = useRef(null);
+  const uploadRef = useRef(null);
   const has = fileIds && fileIds.length > 0;
-  const isImg = imageOnly || docType === "front_photo" || docType === "back_photo";
-  const toneOk = has && required;
-  const toneOkOpt = has && !required;
+  const isImg = imageOnly === true || docType === "front_photo" || docType === "back_photo";
   return (
     <div
       className={`border-2 rounded-sm p-3 ${
-        toneOk ? "border-emerald-300 bg-emerald-50/30" :
-        toneOkOpt ? "border-blue-300 bg-blue-50/30" :
+        has && required ? "border-emerald-300 bg-emerald-50/30" :
+        has && !required ? "border-blue-300 bg-blue-50/30" :
         required ? "border-dashed border-amber-300 bg-amber-50/30" :
         "border-dashed border-zinc-300 bg-zinc-50"
       }`}
@@ -390,34 +404,63 @@ function DocSlot({ label, testid, docType, imageOnly, camera, multi, required, f
           {has ? (multi ? fileIds.length : "✓") : (required ? "!" : "+")}
         </span>
       </div>
+
+      {/* Hidden inputs — one for camera, one for gallery/file */}
       <input
-        ref={ref}
+        ref={captureRef}
         type="file"
-        accept={isImg ? "image/*" : "image/*,application/pdf"}
-        {...(camera ? { capture: "environment" } : {})}
+        accept="image/*"
+        capture="environment"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.[0]) {
             onUpload(e.target.files[0]);
-            e.target.value = ""; // reset so same file re-selects
+            e.target.value = "";
           }
         }}
-        data-testid={`${testid}-input`}
+        data-testid={`${testid}-capture-input`}
       />
-      {!has && (
+      <input
+        ref={uploadRef}
+        type="file"
+        accept={isImg ? "image/*" : "image/*,application/pdf"}
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.[0]) {
+            onUpload(e.target.files[0]);
+            e.target.value = "";
+          }
+        }}
+        data-testid={`${testid}-upload-input`}
+      />
+
+      {/* Two separate action buttons */}
+      <div className="grid grid-cols-2 gap-2">
         <Button
+          type="button"
           size="sm"
           variant="outline"
-          onClick={() => ref.current?.click()}
-          className="w-full rounded-sm font-semibold"
-          data-testid={`${testid}-btn`}
+          onClick={() => captureRef.current?.click()}
+          className="rounded-sm font-semibold h-10 bg-white"
+          data-testid={`${testid}-capture-btn`}
         >
-          {camera ? <Camera className="w-3.5 h-3.5 mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
-          {camera ? "Capture / Upload" : "Upload"}
+          <Camera className="w-4 h-4 mr-1" /> {has && !multi ? "Re-capture" : "Capture"}
         </Button>
-      )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => uploadRef.current?.click()}
+          className="rounded-sm font-semibold h-10 bg-white"
+          data-testid={`${testid}-upload-btn`}
+        >
+          <Upload className="w-4 h-4 mr-1" /> {has && !multi ? "Re-upload" : "Upload"}
+        </Button>
+      </div>
+
+      {/* Preview area */}
       {has && (
-        <div className="space-y-2">
+        <div className="mt-3">
           <div className={isImg && fileIds.length > 1 ? "grid grid-cols-2 gap-1" : "space-y-1"}>
             {fileIds.map((fid) => {
               const url = fileUrl(fid);
@@ -434,25 +477,18 @@ function DocSlot({ label, testid, docType, imageOnly, camera, multi, required, f
                     </a>
                   )}
                   <button
+                    type="button"
                     onClick={() => onDelete(fid)}
-                    className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-5 h-5 text-xs font-bold opacity-80 group-hover:opacity-100 hover:bg-rose-700"
+                    className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-6 h-6 text-xs font-bold opacity-90 group-hover:opacity-100 hover:bg-rose-700 flex items-center justify-center"
                     data-testid={`${testid}-del-${fid}`}
                     aria-label="Remove"
-                  >×</button>
+                  >
+                    ×
+                  </button>
                 </div>
               );
             })}
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => ref.current?.click()}
-            className="w-full rounded-sm text-xs"
-            data-testid={`${testid}-add-more`}
-          >
-            {camera ? <Camera className="w-3 h-3 mr-1" /> : <Upload className="w-3 h-3 mr-1" />}
-            {multi ? "Add another" : "Replace"}
-          </Button>
         </div>
       )}
     </div>

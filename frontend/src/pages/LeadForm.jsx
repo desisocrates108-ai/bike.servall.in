@@ -72,7 +72,8 @@ export default function LeadForm() {
   const [busy, setBusy] = useState(false);
   // Staged files for Exchange Vehicle — uploaded after lead creation
   const [stagedFiles, setStagedFiles] = useState({
-    aadhaar: [],      // [{file, preview}]
+    aadhaar: [],       // aadhaar front (single)
+    aadhaar_back: [],  // aadhaar back (single)
     rc_book: [],
     front_photo: [],
     back_photo: [],
@@ -316,18 +317,26 @@ export default function LeadForm() {
         )}
 
         {form.purchase_type === "Exchange Vehicle" && (
-          <Section title="Vehicle Documents & Images" desc="Upload Aadhaar, RC Book, vehicle photos. Files are saved to this lead after it's created.">
-            <div className="md:col-span-2 space-y-4">
+          <Section title="Vehicle Documents & Images" desc="Capture live from camera or upload from gallery. Files are saved to this lead after it's created.">
+            <div className="md:col-span-2 space-y-5">
               <div>
-                <div className="overline mb-2">Documents</div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="overline mb-2">Identity & Ownership Documents</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <StagedSlot
-                    label="Aadhaar Card"
+                    label="Aadhaar Front"
                     testid="staged-aadhaar"
                     required
                     files={stagedFiles.aadhaar}
                     onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar: [{ file: f, preview: URL.createObjectURL(f) }] }))}
                     onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar: [] }))}
+                  />
+                  <StagedSlot
+                    label="Aadhaar Back"
+                    testid="staged-aadhaar-back"
+                    required
+                    files={stagedFiles.aadhaar_back}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar_back: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar_back: [] }))}
                   />
                   <StagedSlot
                     label="RC Book"
@@ -336,14 +345,6 @@ export default function LeadForm() {
                     files={stagedFiles.rc_book}
                     onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_book: [{ file: f, preview: URL.createObjectURL(f) }] }))}
                     onRemove={() => setStagedFiles((s) => ({ ...s, rc_book: [] }))}
-                  />
-                  <StagedSlot
-                    label="Other Documents"
-                    testid="staged-other"
-                    multi
-                    files={stagedFiles.other}
-                    onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
-                    onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
                   />
                 </div>
               </div>
@@ -356,7 +357,6 @@ export default function LeadForm() {
                     testid="staged-front"
                     required
                     imageOnly
-                    camera
                     files={stagedFiles.front_photo}
                     onAdd={(f) => setStagedFiles((s) => ({ ...s, front_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
                     onRemove={() => setStagedFiles((s) => ({ ...s, front_photo: [] }))}
@@ -366,7 +366,6 @@ export default function LeadForm() {
                     testid="staged-back"
                     required
                     imageOnly
-                    camera
                     files={stagedFiles.back_photo}
                     onAdd={(f) => setStagedFiles((s) => ({ ...s, back_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
                     onRemove={() => setStagedFiles((s) => ({ ...s, back_photo: [] }))}
@@ -374,18 +373,31 @@ export default function LeadForm() {
                 </div>
               </div>
 
+              <div>
+                <div className="overline mb-2">Other Documents (optional)</div>
+                <StagedSlot
+                  label="Other Documents"
+                  testid="staged-other"
+                  multi
+                  files={stagedFiles.other}
+                  onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
+                  onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
+                />
+              </div>
+
               {(() => {
                 const done =
                   (stagedFiles.aadhaar.length ? 1 : 0) +
+                  (stagedFiles.aadhaar_back.length ? 1 : 0) +
                   (stagedFiles.rc_book.length ? 1 : 0) +
                   (stagedFiles.front_photo.length ? 1 : 0) +
                   (stagedFiles.back_photo.length ? 1 : 0);
                 const other = stagedFiles.other.length;
                 return (
-                  <div className={`text-xs font-bold ${done === 4 ? "text-emerald-700" : "text-amber-700"}`} data-testid="staged-progress">
-                    {done === 4
-                      ? `✅ All 4 mandatory files staged${other ? ` · +${other} other` : ""}`
-                      : `⚠️ ${done}/4 mandatory files staged — will upload after lead is saved${other ? ` · +${other} other` : ""}`}
+                  <div className={`text-xs font-bold ${done === 5 ? "text-emerald-700" : "text-amber-700"}`} data-testid="staged-progress">
+                    {done === 5
+                      ? `✅ All 5 mandatory files staged${other ? ` · +${other} other` : ""}`
+                      : `⚠️ ${done}/5 mandatory files staged — will upload after lead is saved${other ? ` · +${other} other` : ""}`}
                   </div>
                 );
               })()}
@@ -471,10 +483,11 @@ export default function LeadForm() {
   );
 }
 
-function StagedSlot({ label, testid, imageOnly, camera, multi, required, files, onAdd, onRemove }) {
-  const ref = useRef(null);
+function StagedSlot({ label, testid, imageOnly, multi, required, files, onAdd, onRemove }) {
+  const captureRef = useRef(null);
+  const uploadRef = useRef(null);
   const has = files && files.length > 0;
-  const isImg = imageOnly;
+  const isImg = imageOnly === true;
   return (
     <div
       className={`border-2 rounded-sm p-3 ${
@@ -493,11 +506,13 @@ function StagedSlot({ label, testid, imageOnly, camera, multi, required, files, 
           {has ? (multi ? files.length : "✓") : (required ? "!" : "+")}
         </span>
       </div>
+
+      {/* Two hidden inputs — capture (rear cam) + upload (file picker) */}
       <input
-        ref={ref}
+        ref={captureRef}
         type="file"
-        accept={isImg ? "image/*" : "image/*,application/pdf"}
-        {...(camera ? { capture: "environment" } : {})}
+        accept="image/*"
+        capture="environment"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.[0]) {
@@ -505,16 +520,33 @@ function StagedSlot({ label, testid, imageOnly, camera, multi, required, files, 
             e.target.value = "";
           }
         }}
-        data-testid={`${testid}-input`}
+        data-testid={`${testid}-capture-input`}
       />
-      {!has && (
-        <Button type="button" size="sm" variant="outline" onClick={() => ref.current?.click()} className="w-full rounded-sm font-semibold" data-testid={`${testid}-btn`}>
-          {camera ? <Camera className="w-3.5 h-3.5 mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
-          {camera ? "Capture / Upload" : "Upload"}
+      <input
+        ref={uploadRef}
+        type="file"
+        accept={isImg ? "image/*" : "image/*,application/pdf"}
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.[0]) {
+            onAdd(e.target.files[0]);
+            e.target.value = "";
+          }
+        }}
+        data-testid={`${testid}-upload-input`}
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={() => captureRef.current?.click()} className="rounded-sm font-semibold h-10 bg-white" data-testid={`${testid}-capture-btn`}>
+          <Camera className="w-4 h-4 mr-1" /> {has && !multi ? "Re-capture" : "Capture"}
         </Button>
-      )}
+        <Button type="button" size="sm" variant="outline" onClick={() => uploadRef.current?.click()} className="rounded-sm font-semibold h-10 bg-white" data-testid={`${testid}-upload-btn`}>
+          <Upload className="w-4 h-4 mr-1" /> {has && !multi ? "Re-upload" : "Upload"}
+        </Button>
+      </div>
+
       {has && (
-        <div className="space-y-2">
+        <div className="mt-3">
           <div className={isImg && files.length > 1 ? "grid grid-cols-2 gap-1" : "space-y-1"}>
             {files.map((s, i) => (
               <div key={i} className="relative group">
@@ -529,19 +561,15 @@ function StagedSlot({ label, testid, imageOnly, camera, multi, required, files, 
                 <button
                   type="button"
                   onClick={() => onRemove(i)}
-                  className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-5 h-5 text-xs font-bold hover:bg-rose-700"
+                  className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-6 h-6 text-xs font-bold hover:bg-rose-700 flex items-center justify-center"
                   data-testid={`${testid}-del-${i}`}
                   aria-label="Remove"
                 >
-                  <XIcon className="w-3 h-3 mx-auto" />
+                  <XIcon className="w-3 h-3" />
                 </button>
               </div>
             ))}
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={() => ref.current?.click()} className="w-full rounded-sm text-xs" data-testid={`${testid}-add-more`}>
-            {camera ? <Camera className="w-3 h-3 mr-1" /> : <Upload className="w-3 h-3 mr-1" />}
-            {multi ? "Add another" : "Replace"}
-          </Button>
         </div>
       )}
     </div>
