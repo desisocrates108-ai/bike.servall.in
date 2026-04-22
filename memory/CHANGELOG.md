@@ -1,5 +1,27 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-22 — Iteration 14: Exchange Vehicle Complete Docs & Images System
+**Scope**: Full document/image upload pipeline during lead creation + restructured Exchange tab.
+
+### Backend
+- Extended allowed `doc_type` values on `POST /api/leads/{lid}/exchange-photos` to include `"other"` — stores in `lead.exchange.documents.other[]` (multi).
+- Backward-compatible: `photo` (default) still goes to `exchange.photos[]`.
+
+### Frontend
+- **LeadForm.jsx**: New `Vehicle Documents & Images` section below Expected Price (only when purchase_type = Exchange Vehicle) with 5 staged slots:
+  - Documents: Aadhaar * (single), RC Book * (single), Other Documents (multi, optional)
+  - Vehicle Photos: Front * (camera), Back * (camera)
+  - Files held in `stagedFiles` state; after successful POST `/api/leads`, the form iterates uploads to `/api/leads/{id}/exchange-photos?doc_type=<bucket>` sequentially. Toast shows upload progress.
+- **ExchangeSection.jsx (LeadDetail)**:
+  - Card renamed from "Mandatory Documents (4)" to **"Vehicle Documents & Images"**.
+  - Two sub-blocks: `Documents` (3-col: Aadhaar, RC Book, Other multi) + `Vehicle Photos` (2-col: Front, Back).
+  - Front/Back slots use `capture="environment"` for direct rear-camera capture on mobile.
+  - Progress line counts 4 mandatory + "+N other" suffix.
+  - Legacy `photos[]` bucket still visible as "Legacy Photos" card only if non-empty (backward-compat for old leads).
+
+### Test report
+`/app/test_reports/iteration_14.json` — **100% PASS** (12/12 backend + full frontend Playwright). Only one micro-race UX note (non-blocking).
+
 ## 2026-04-22 — Iteration 13: Interactive Gujarati Calendar Popup
 **Scope**: Turn the static calendar widget into a live, data-driven, click-through month view.
 
