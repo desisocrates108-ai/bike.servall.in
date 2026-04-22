@@ -1,5 +1,36 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-22 — Iteration 16: Unified KYC + Exchange Document System
+**Scope**: Complete redesign — separate identity/KYC (all leads) from exchange-specific docs (Exchange only), with strict stage-gate enforcement.
+
+### Data model
+- `lead.identity_docs = { aadhaar: [fid], aadhaar_back: [fid], other: [fid,…] }` — top-level, applies to **all leads**.
+- `lead.exchange.documents = { rc_front, rc_back, rc_pdf, front_photo, back_photo }` — Exchange only.
+- Legacy `lead.exchange.photos[]` still supported for old data.
+
+### Backend
+- Refactored `POST /api/leads/{lid}/exchange-photos` to route by bucket:
+  - Identity buckets → `lead.identity_docs.*`
+  - Exchange buckets → `lead.exchange.documents.*`
+  - Legacy `photo` → `lead.exchange.photos`
+- `DELETE /api/leads/{lid}/exchange-photos/{file_id}` — transparently scans all three stores.
+- **Stage-gate validation** on `POST /leads/{lid}/stage`:
+  - Any forward stage past Inquiry requires `aadhaar` + `aadhaar_back`.
+  - `purchase_type=Exchange Vehicle` additionally requires `rc_front` + `rc_back` + `front_photo` + `back_photo`.
+  - Stage→Lost and Stage→Inquiry always allowed.
+  - Returns `400` with exact missing list.
+- **Conditional cleanup** — `PUT /api/leads/{lid}` with `purchase_type=New Purchase` on a previously Exchange lead wipes `lead.exchange` to null but preserves `identity_docs`.
+
+### Frontend
+- **NEW** `components/DocSlot.jsx` — shared slot with Capture + Upload split buttons (extracted from ExchangeSection).
+- **NEW** `components/IdentityDocsPanel.jsx` — KYC panel (Aadhaar F/B + Other). Rendered in a new `tab-kyc` tab on LeadDetail, visible to **all leads**.
+- **ExchangeSection.jsx** — Aadhaar removed (moved to KYC). Now 2 cards only: `Vehicle Documents (RC Book)` (rc-front, rc-back, rc-pdf) + `Vehicle Photos` (front, back).
+- **LeadForm.jsx** — Unified `Identity Documents & Vehicle Uploads` section (always visible) with conditional RC + Vehicle Photo sub-sections when Exchange. Mandatory counts: 2 for New / 6 for Exchange. Submit uploads identity for all leads + exchange only when applicable.
+- **LeadDetail.jsx** — New `tab-kyc` tab added between `Booking` and `Exchange`.
+
+### Test report
+`/app/test_reports/iteration_16.json` — **100% PASS** (18/18 backend pytest + full frontend Playwright). No blocking bugs.
+
 ## 2026-04-22 — Iteration 15: Split Capture/Upload Buttons + Aadhaar Front/Back
 **Scope**: Clearer mobile UX per upload slot.
 
