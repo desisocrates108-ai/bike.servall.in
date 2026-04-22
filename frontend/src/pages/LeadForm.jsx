@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, formatApiErrorDetail } from "../api";
@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import { toast } from "sonner";
+import { Upload, Camera, FileText, X as XIcon } from "lucide-react";
 
 const Section = ({ title, desc, children }) => (
   <div className="bg-white border border-zinc-200 rounded-sm p-6 mb-4">
@@ -69,6 +70,14 @@ export default function LeadForm() {
     notes: "",
   });
   const [busy, setBusy] = useState(false);
+  // Staged files for Exchange Vehicle — uploaded after lead creation
+  const [stagedFiles, setStagedFiles] = useState({
+    aadhaar: [],      // [{file, preview}]
+    rc_book: [],
+    front_photo: [],
+    back_photo: [],
+    other: [],
+  });
 
   useEffect(() => {
     api.get("/constants").then((r) => setConstants(r.data));
@@ -126,6 +135,29 @@ export default function LeadForm() {
       });
 
       const { data } = await api.post("/leads", payload);
+
+      // Upload staged exchange files (if any) after successful lead creation
+      if (payload.purchase_type === "Exchange Vehicle") {
+        const all = Object.entries(stagedFiles).flatMap(([k, arr]) => arr.map((s) => ({ docType: k, file: s.file })));
+        if (all.length > 0) {
+          toast.loading(`Uploading ${all.length} file(s)…`, { id: "exch-up" });
+          for (const { docType, file } of all) {
+            try {
+              const fd = new FormData();
+              fd.append("file", file);
+              await api.post(`/leads/${data.id}/exchange-photos`, fd, {
+                headers: { "Content-Type": "multipart/form-data" },
+                params: { doc_type: docType },
+              });
+            } catch (err) {
+              // continue — don't block lead creation
+              console.error("Upload failed", docType, err);
+            }
+          }
+          toast.success(`${all.length} file(s) uploaded`, { id: "exch-up" });
+        }
+      }
+
       toast.success("Lead created");
       nav(`/leads/${data.id}`);
     } catch (e) {
@@ -283,6 +315,84 @@ export default function LeadForm() {
           </Section>
         )}
 
+        {form.purchase_type === "Exchange Vehicle" && (
+          <Section title="Vehicle Documents & Images" desc="Upload Aadhaar, RC Book, vehicle photos. Files are saved to this lead after it's created.">
+            <div className="md:col-span-2 space-y-4">
+              <div>
+                <div className="overline mb-2">Documents</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <StagedSlot
+                    label="Aadhaar Card"
+                    testid="staged-aadhaar"
+                    required
+                    files={stagedFiles.aadhaar}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar: [] }))}
+                  />
+                  <StagedSlot
+                    label="RC Book"
+                    testid="staged-rc-book"
+                    required
+                    files={stagedFiles.rc_book}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_book: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={() => setStagedFiles((s) => ({ ...s, rc_book: [] }))}
+                  />
+                  <StagedSlot
+                    label="Other Documents"
+                    testid="staged-other"
+                    multi
+                    files={stagedFiles.other}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="overline mb-2">Vehicle Photos</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <StagedSlot
+                    label="Front Photo"
+                    testid="staged-front"
+                    required
+                    imageOnly
+                    camera
+                    files={stagedFiles.front_photo}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, front_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={() => setStagedFiles((s) => ({ ...s, front_photo: [] }))}
+                  />
+                  <StagedSlot
+                    label="Back Photo"
+                    testid="staged-back"
+                    required
+                    imageOnly
+                    camera
+                    files={stagedFiles.back_photo}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, back_photo: [{ file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={() => setStagedFiles((s) => ({ ...s, back_photo: [] }))}
+                  />
+                </div>
+              </div>
+
+              {(() => {
+                const done =
+                  (stagedFiles.aadhaar.length ? 1 : 0) +
+                  (stagedFiles.rc_book.length ? 1 : 0) +
+                  (stagedFiles.front_photo.length ? 1 : 0) +
+                  (stagedFiles.back_photo.length ? 1 : 0);
+                const other = stagedFiles.other.length;
+                return (
+                  <div className={`text-xs font-bold ${done === 4 ? "text-emerald-700" : "text-amber-700"}`} data-testid="staged-progress">
+                    {done === 4
+                      ? `✅ All 4 mandatory files staged${other ? ` · +${other} other` : ""}`
+                      : `⚠️ ${done}/4 mandatory files staged — will upload after lead is saved${other ? ` · +${other} other` : ""}`}
+                  </div>
+                );
+              })()}
+            </div>
+          </Section>
+        )}
+
         <Section title="Deal">
           <Field label="Customer Expected Price">
             <Input type="number" value={form.deal.customer_expected_price} onChange={(e) => setNested("deal", "customer_expected_price", e.target.value)} />
@@ -358,5 +468,82 @@ export default function LeadForm() {
       </form>
       </div>
     </>
+  );
+}
+
+function StagedSlot({ label, testid, imageOnly, camera, multi, required, files, onAdd, onRemove }) {
+  const ref = useRef(null);
+  const has = files && files.length > 0;
+  const isImg = imageOnly;
+  return (
+    <div
+      className={`border-2 rounded-sm p-3 ${
+        has ? "border-emerald-300 bg-emerald-50/30" :
+        required ? "border-dashed border-amber-300 bg-amber-50/30" :
+        "border-dashed border-zinc-300 bg-zinc-50"
+      }`}
+      data-testid={testid}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-bold text-xs uppercase tracking-wider flex items-center gap-1">
+          {label} {required && <span className="text-rose-600">*</span>}
+          {multi && <span className="text-[9px] font-semibold text-zinc-500">(multi)</span>}
+        </div>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${has ? "bg-emerald-600 text-white" : required ? "bg-amber-500 text-white" : "bg-zinc-400 text-white"}`}>
+          {has ? (multi ? files.length : "✓") : (required ? "!" : "+")}
+        </span>
+      </div>
+      <input
+        ref={ref}
+        type="file"
+        accept={isImg ? "image/*" : "image/*,application/pdf"}
+        {...(camera ? { capture: "environment" } : {})}
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.[0]) {
+            onAdd(e.target.files[0]);
+            e.target.value = "";
+          }
+        }}
+        data-testid={`${testid}-input`}
+      />
+      {!has && (
+        <Button type="button" size="sm" variant="outline" onClick={() => ref.current?.click()} className="w-full rounded-sm font-semibold" data-testid={`${testid}-btn`}>
+          {camera ? <Camera className="w-3.5 h-3.5 mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
+          {camera ? "Capture / Upload" : "Upload"}
+        </Button>
+      )}
+      {has && (
+        <div className="space-y-2">
+          <div className={isImg && files.length > 1 ? "grid grid-cols-2 gap-1" : "space-y-1"}>
+            {files.map((s, i) => (
+              <div key={i} className="relative group">
+                {isImg || (s.file.type || "").startsWith("image/") ? (
+                  <img src={s.preview} alt={label} className="border border-zinc-200 w-full aspect-square object-cover rounded-sm" />
+                ) : (
+                  <div className="flex items-center gap-2 p-2 bg-white border border-zinc-200 rounded-sm text-xs font-mono">
+                    <FileText className="w-4 h-4 text-brand flex-shrink-0" />
+                    <span className="truncate">{s.file.name}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-sm w-5 h-5 text-xs font-bold hover:bg-rose-700"
+                  data-testid={`${testid}-del-${i}`}
+                  aria-label="Remove"
+                >
+                  <XIcon className="w-3 h-3 mx-auto" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => ref.current?.click()} className="w-full rounded-sm text-xs" data-testid={`${testid}-add-more`}>
+            {camera ? <Camera className="w-3 h-3 mr-1" /> : <Upload className="w-3 h-3 mr-1" />}
+            {multi ? "Add another" : "Replace"}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration-14 Exchange Vehicle documents/images enhancement validated end-to-end. Backend pytest 12/12 PASS at /app/backend/tests/test_iter14_exchange_docs.py covering: (1) NEW `other` bucket — POST /api/leads/{lid}/exchange-photos?doc_type=other accepts JPG+PDF and appends to exchange.documents.other[] (single upload, multi-append both verified via GET /api/leads/{id}); (2) Regression — aadhaar/rc_book/front_photo/back_photo all route to exchange.documents.<bucket>[], no-param default + invalid type both fall back to exchange.photos[] (backward-compat preserved); (3) DELETE /api/leads/{lid}/exchange-photos/{file_id} removes from `other` bucket AND aadhaar bucket, returns {ok:true}; non-existent fid returns {ok:false}. Frontend Playwright (desktop 1920x1080, super_admin) on /leads/new with purchase-type-exchange-vehicle: `Vehicle Documents & Images` Section renders below Expected Price with all 6 testids — staged-aadhaar, staged-rc-book, staged-other, staged-front, staged-back, staged-progress ✓. Aadhaar+RC+Front+Back show required `*`, amber dashed border (aadhaar & rc verified via class 'amber'+'dashed'). staged-front/back render 'Capture / Upload' label (Camera icon) and hidden `<input capture=environment>` (confirmed via getAttribute); staged-aadhaar input has no capture attr (correct). Initial staged-progress = '⚠️ 0/4 mandatory files staged'. After staging 4 mandatory JPGs + 1 other PDF via setInputFiles → '✅ All 4 mandatory files staged · +1 other'. staged-aadhaar-del-0 removes file → '⚠️ 3/4 …'. submit-lead-button → POST /api/leads succeeds (200) → then exactly 5 sequential POST /api/leads/{id}/exchange-photos?doc_type=<bucket> calls fired (aadhaar, rc_book, front_photo, back_photo, other) → redirect to /leads/{id}. tab-exchange renders `Vehicle Documents & Images` Card (title string matched literally); exch-doc-slots has 3 child DocSlots, exch-photo-slots has 2 ✓. exch-doc-progress='✅ All 4 mandatory documents uploaded · +1 other'. slot-front-input capture=environment, slot-back-input capture=environment, slot-other-input capture=null (correct — only photos use camera). Uploading an extra PDF to slot-other and deleting via slot-other-del-<fid> both work. No blocking bugs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "LeadDetail Exchange tab — exch-doc-progress", "issues": ["Slight UI state lag: after uploading a NEW file to slot-other on the LeadDetail tab, the exch-doc-progress counter refreshed one beat later than expected (observed +1 other immediately after upload, then reflected +2 after the next delete action). Functional — underlying data is correct (`OTHER DOCUMENTS (2)` shows 2 entries in slot UI) — likely a micro-race between `onReload` resolving and the progress-line re-render. Non-blocking; consider awaiting the reload promise before updating the progress label."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_exchange_docs.py",
+    "/app/test_reports/pytest/pytest_results_iter14.xml"
+  ],
+  "action_items": [
+    "NONE blocking. Iteration-14 (Exchange Docs + staged-upload-after-create) is production-ready.",
+    "(Carry-over iter-13, LOW/a11y) CalendarDialog missing DialogTitle/DialogDescription — Radix console errors on open.",
+    "(Carry-over iter-10-11, HIGH) Global-search dropdown z-index under sticky PageHeader — not retested.",
+    "(Carry-over iter-10, MEDIUM) POST /api/users without phone → 500 (non-sparse unique index)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L2582-2627 upload_exchange_photo: allowed_types correctly extended to include 'other'; invalid doc_type silently falls back to 'photo' (dt=photo) instead of 400 — acceptable for the current frontend contract (sends known values) but stricter 400 would be safer REST. doc_type 'Exchange Other' cosmetic label stored via .title() works fine.",
+    "server.py L2630-2653 delete_exchange_photo: scans photos[] + all documents.* buckets including 'other' — correct; returns {ok: false} on miss (status 200) — consider 404 for stricter REST, already flagged in iter-12.",
+    "LeadForm.jsx L137-159 submit(): after POST /leads succeeds, uploads are done sequentially in a for-loop with try/catch per file — one failed upload won't abort the batch, which is the right trade-off. However, progress is shown via a single toast.loading(…) then a single success toast regardless of per-file failures; consider counting successes/failures and reporting 'n of m uploaded, k failed' if any error fired.",
+    "LeadForm.jsx L141: Object.entries(stagedFiles).flatMap(...) iterates keys in insertion order {aadhaar, rc_book, front_photo, back_photo, other} — stable in current JS; fine.",
+    "StagedSlot (LeadForm.jsx L474-549): React state `stagedFiles` stores `URL.createObjectURL(f)` previews but never revokes them — minor memory leak on navigation away, recommend revokeObjectURL in onRemove & component cleanup.",
+    "StagedSlot multi mode (`onAdd` for 'other' appends): add-more clicking re-uses the same hidden input ref — when user selects same filename twice in a row, the `e.target.value=''` reset ensures onChange fires; confirmed working.",
+    "ExchangeSection.jsx L248-328: card title string now exactly 'Vehicle Documents & Images' (no more 'Mandatory Documents (4)'); lg:grid-cols-3 for docs, sm:grid-cols-2 for photos — responsive stack works. `other` DocSlot is multi+not required (correct).",
+    "DocSlot (ExchangeSection.jsx L370+): camera prop threads `capture=\"environment\"` onto the hidden file input — validated both staged (LeadForm) and persisted (LeadDetail) variants.",
+    "Backward-compat: lead.exchange.photos[] (legacy generic bucket) is STILL reachable if any old uploader omits doc_type; LeadDetail shows 'Legacy Photos' card for photos.length>0 — good migration path, consider a one-off migration later to push legacy items into documents.other[]."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_exchange_docs.py (NEW — 12 tests, all PASS)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 iter-14 tests)",
+    "frontend": "100% on iter-14 scope — LeadForm staged-{aadhaar,rc-book,other,front,back}, staged-progress transitions, camera=environment on front/back, 5 sequential exchange-photos POSTs after lead creation with correct doc_type params, LeadDetail tab-exchange card title 'Vehicle Documents & Images', exch-doc-slots=3 + exch-photo-slots=2, slot-other PDF upload + delete"
+  },
+  "test_credentials": "superadmin@dealer.com/super123 — sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created ~2 TEST_ prefixed leads during this run: 1 from pytest fixture (TEST_IT14_Exch_*, purchase_type=Exchange Vehicle, used for all 12 upload/delete tests), 1 from Playwright e2e (TEST_IT14_Stage_*, purchase_type=Exchange Vehicle, with 5 files uploaded via staged flow). Non-destructive; no seeded data modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-14 regression base: /app/backend/tests/test_iter14_exchange_docs.py. Surface expanded: POST /api/leads/{lid}/exchange-photos now accepts doc_type∈{photo, aadhaar, rc_book, front_photo, back_photo, other}; default & unknown → photo[]. LeadForm testids: staged-{aadhaar|rc-book|other|front|back}, each with `-input` (hidden file), `-btn` (initial upload), `-del-<i>` (remove), `-add-more` (replace/another), plus staged-progress line. camera=environment only on staged-front-input & staged-back-input. ExchangeSection testids (LeadDetail /tab-exchange): exch-doc-slots (3 children: slot-aadhaar, slot-rc-book, slot-other), exch-photo-slots (2 children: slot-front, slot-back), each slot has slot-<name>-input / slot-<name>-btn / slot-<name>-del-<fid> / slot-<name>-add-more. exch-doc-progress for the 4-mandatory counter. Legacy photos[] card only appears when legacy bucket non-empty. Known non-blocking: (a) exch-doc-progress counter has a brief lag after new upload (onReload race), (b) ObjectURL previews in stagedFiles are not revoked on navigation (minor leak), (c) one-failed-upload doesn't surface in toast (per-file try/catch swallows).",
+  "rca of the issue": "No iter-14 bug found. One test-authoring pitfall: /api/constants does NOT include branches/brands/models/variants/colors (these are separate endpoints: /api/branches, /api/brands, /api/models, /api/variants, /api/colors). Initial _pick_ids() using d['branches'] raised KeyError. Fixed by calling the dedicated endpoints directly (matches pattern used in test_iter12_p0.py)."
+}

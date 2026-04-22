@@ -2589,7 +2589,7 @@ async def upload_exchange_photo(lid: str, file: UploadFile = File(...),
     if not await can_access_lead(user, lead):
         raise HTTPException(403, "Access denied")
     # doc_type controls which bucket to store file id under
-    allowed_types = {"photo", "aadhaar", "rc_book", "front_photo", "back_photo"}
+    allowed_types = {"photo", "aadhaar", "rc_book", "front_photo", "back_photo", "other"}
     dt = (doc_type or "photo").lower()
     if dt not in allowed_types:
         dt = "photo"
