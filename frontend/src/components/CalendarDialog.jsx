@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { Dialog, DialogContent } from "./ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import {
   ChevronLeft, ChevronRight, X, ArrowLeft,
@@ -114,6 +114,12 @@ export default function CalendarDialog({ open, onOpenChange, branchId = "" }) {
         className="max-w-[520px] w-[95vw] sm:w-full p-0 gap-0 rounded-sm overflow-hidden max-h-[92vh] flex flex-col"
         data-testid="calendar-dialog"
       >
+        <DialogTitle className="sr-only">
+          {selectedDate ? `Day Detail — ${selectedDate}` : `Gujarati Calendar — ${MONTHS[cursor.m - 1]} ${cursor.y}`}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Interactive monthly calendar showing deliveries, follow-ups, upcoming bookings, overdue items and Gujarati festivals. Tap a date to see full details.
+        </DialogDescription>
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-200 bg-white flex-shrink-0">
           {selectedDate ? (

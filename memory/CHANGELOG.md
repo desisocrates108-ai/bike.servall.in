@@ -1,5 +1,26 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-22 — Iteration 13: Interactive Gujarati Calendar Popup
+**Scope**: Turn the static calendar widget into a live, data-driven, click-through month view.
+
+### Backend
+1. New endpoint `GET /api/analytics/calendar?year=&month=&branch_id=` — returns `{year, month, days: {YYYY-MM-DD: {deliveries[], followups[], upcoming[], overdue[]}}}`.
+2. Fully RBAC-scoped: sales_executive → own leads, admin → own branch, super_admin → global (optional branch_id filter). Validates year ∈ [2024, 2035] and month ∈ [1, 12].
+3. Data sources: `deliveries.delivery_date`, `bookings.expected_delivery_date`, `followups.scheduled_date`, `leads.next_followup_date` (overdue vs upcoming by `< today`).
+
+### Frontend
+- **New** `components/CalendarDialog.jsx` — overlay modal (Radix Dialog) with:
+  - Month grid with prev/next/today controls
+  - Color-coded event dots per date: 🟢 Delivered, 🔵 Follow-up, 🟡 Upcoming, 🔴 Overdue, 🟣 Festival (star for important ones)
+  - Click any event-day → Day Detail view (same dialog) with Back button (`←`). Detail shows Festivals, Deliveries, Overdue, Upcoming, Follow-ups as sections; each lead row links to `/leads/{id}` and closes the dialog.
+  - Escape / Close / Back / Today all wired.
+  - Mobile-friendly (95vw, scrollable, ~92vh max height).
+  - A11y: `DialogTitle`+`DialogDescription` in `sr-only`.
+- `GujaratiCalendar.jsx` — the calendar-header icon replaced with clickable `calendar-open-btn` that opens the dialog. Accepts `branchId` prop; Dashboard forwards `branchFilter` when super_admin filters a branch.
+
+### Test report
+`/app/test_reports/iteration_13.json` — **100% PASS** (15/15 backend + full frontend desktop+mobile Playwright). Only a11y console warnings were flagged and fixed post-test.
+
 ## 2026-04-22 — Iteration 12: Wiring + Forms + Exchange Multi-Upload (P0 Bundle)
 **Scope**: Complete the in-progress Iteration 12. All P0 items shipped + tested (18/18 backend + full frontend Playwright PASS).
 
