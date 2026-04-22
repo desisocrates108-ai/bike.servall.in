@@ -53,7 +53,7 @@ export default function GlobalSearch() {
     setMobileOpen(false);
   };
 
-  const input = (autoFocus = false) => (
+  const input = (autoFocus = false, testidSuffix = "") => (
     <div className="relative w-full" ref={boxRef}>
       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
       <input
@@ -64,7 +64,7 @@ export default function GlobalSearch() {
         onFocus={() => setOpen(true)}
         placeholder={t("search.placeholder", "Search name, phone, lead…")}
         className="w-full pl-9 pr-9 h-10 rounded-sm border border-zinc-200 bg-white text-sm focus:outline-none focus:border-brand"
-        data-testid="global-search-input"
+        data-testid={`global-search-input${testidSuffix}`}
       />
       {q && (
         <button
@@ -111,7 +111,7 @@ export default function GlobalSearch() {
   return (
     <>
       {/* Desktop inline */}
-      <div className="hidden md:block w-full">{input()}</div>
+      <div className="hidden md:block w-full">{input(false, "")}</div>
 
       {/* Mobile collapsible */}
       <button
@@ -133,7 +133,7 @@ export default function GlobalSearch() {
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="flex-1">{input(true)}</div>
+            <div className="flex-1">{input(true, "-mobile")}</div>
           </div>
         </div>
       )}

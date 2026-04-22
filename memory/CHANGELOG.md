@@ -1,42 +1,38 @@
 # CHANGELOG — Servall CRM
 
-## 2026-04-21 — Iteration 10: Role Hardening + Global Search + Contacts + Reminder
-**Scope**: Branch-admin access restrictions, CEO global search + branch filters, sales-exec contacts + reminder, remove Help button.
+## 2026-04-21 — Iteration 11: CEO + Sales Manager Compliance Audit
+**Scope**: Full requirements audit against user's CEO + Sales Manager specs. Identified 5 gaps and shipped fixes.
 
-### Removed
-- **Floating Help (?) guide button** completely. `GuideButton` no longer imported in `Layout.jsx`. File kept for future re-enable but not rendered.
-- **Branch Admin** access to Users, Branches, Audit Logs:
-  - UI: sidebar nav items only render when `isSuper === true`
-  - Routes: `/users`, `/branches`, `/audit-logs` now `roles={["super_admin"]}` only
-  - Backend: POST/PUT `/api/users` → `super_admin` only; GET `/api/audit-logs` → `super_admin` only; GET `/api/users` kept for admin (needed for dropdowns)
+### Backend gaps FIXED
+1. **Seeded all 5 branches**: added Amalsad + Vansda (previously only Bilimora, Chikhli, Gandevi)
+2. **`call_recording_url` + `call_recording_filename`** fields on `FollowupIn` model + `add_followup` persistence
+3. **`RegistrationInfo` model** (status / rto_office / number_allotted / number_allotted_date / plate_fitted / plate_fitted_date / notes) added to `LeadUpdate` — PUT `/api/leads/{id}` now accepts `{registration: {...}}`
+4. **Default WhatsApp templates seeded** (idempotent): "Inquiry — send catalog", "Delivery — thank you", "Feedback — request"
+5. **Default automation rules seeded** (idempotent): Auto-send catalog on inquiry (`inquiry_created`), Thank you on delivery (`delivery_completed`), Feedback reminder (`feedback_reminder`)
 
-### Added
-- **GlobalSearch** (`components/GlobalSearch.jsx`): top-bar search with debounced dropdown of matching leads (name/phone). Desktop inline; mobile collapsible full-screen sheet. Backend-scoped via `/api/leads?search=` so CEO sees all, admin sees own branch, sales sees own leads. Dropdown rendered at `z-50` inside a `z-30` top bar so it beats PageHeader (`z-20`).
-- **Contacts page** (`/contacts`): de-duplicated customer list (by phone) with Call (`tel:`) and WhatsApp (`https://wa.me/91<num>`) one-tap buttons. `data-testid=contact-card-<id>, contact-call-<id>, contact-wa-<id>`.
-- **Branch filter** on Dashboard (super_admin only — `dash-branch-filter`) and Funnel (`funnel-branch-filter`). Backend `/api/analytics/summary` and `/api/analytics/performance` now accept optional `branch_id` query honored only for super_admin.
-- **Set Reminder** button + dialog on LeadDetail: `set-reminder-btn` opens dialog with `reminder-date`, `reminder-time`, `reminder-type`, `save-reminder-btn`. Saves `next_followup_date/time/type` on the lead via `PUT /api/leads/{id}` → appears in Tasks page automatically. Missed reminders already highlighted in Tasks "Missed" tab.
-- **Role-aware bottom nav**:
-  - `sales_executive`: Home / Leads / Tasks / **Contacts**
-  - `admin` + `super_admin`: Home / Leads / Tasks / **WhatsApp**
-
-### Changed
-- `LeadUpdate` Pydantic model now accepts `next_followup_time` field.
-- i18n: `nav.contacts`, `search.*`, `contacts.*`, `dash.all_branches` in EN + GU.
+### Frontend gaps FIXED
+- **New `/reports` page** (`pages/Reports.jsx`): client-side aggregation over `/api/leads` → Source conversion % table, Loss-reason donut, Funnel chart with drop-offs, Customer behaviour breakdown, Brand performance, Top 10 sold models, Sales exec ranking table (click → /users/:id), Branch comparison bars (CEO only, click → /branches/:id). Super-admin gets `reports-branch-filter` dropdown.
+- **Reports sidebar link** `nav-reports` (visible to admin + super_admin)
+- **Route** `/reports` gated `roles=["super_admin","admin"]`
+- **Registration tab** on LeadDetail (`tab-registration`) with full RegistrationSection form: status dropdown, RTO office, number allotted, allotted date, plate fitted checkbox, plate date (gated), notes, save → persists via PUT
+- GlobalSearch now uses distinct testids `global-search-input` (desktop) and `global-search-input-mobile` to avoid duplicate-DOM test collisions
 
 ### Testing
-- Iteration 10 report: `/app/test_reports/iteration_10.json`
-- Backend: **13/13** pytest pass (`/app/backend/tests/test_iter10_rbac.py`)
-- Frontend: Playwright flows pass after z-index fix on GlobalSearch dropdown (`z-30` on desktop top bar)
-- RBAC verified: admin gets 403 on POST/PUT `/users`, GET `/audit-logs`; still 200 on GET `/users`; super_admin full access
+- Iteration 11 report: `/app/test_reports/iteration_11.json`
+- Backend: **7/7 pytest PASS** (`/app/backend/tests/test_iter11_compliance.py`)
+- Frontend Playwright (desktop + mobile) all flows pass
+- Super/admin Reports renders correctly; sales_executive is blocked
+- Registration PUT round-trip verified (saved → reloaded → values retained)
 
-### Known minor (non-blocking)
-- Admin cross-branch filter silently scoped to own branch (carry-over). Explicit 403 remains optional hardening.
-- `POST /api/users` without `phone` surfaced a 500 in one test run — phone index is `sparse=True` and should allow null; could be a race with a prior duplicate-null attempt before the index migration. Make `phone` required at the API layer if desired.
+### Known (non-blocking)
+- `/reports` aggregation is client-side — OK for current seed volume; plan server-side `/api/reports/summary` endpoint before 5k+ leads
+- Empty-state copy missing when branch filter yields 0 leads (UX polish, not a bug)
+- Carry-over LOW: admin cross-branch filter silent scope vs explicit 403
+- Carry-over MEDIUM: POST /api/users without phone → 500 (phone index already `sparse=True`; can harden at API layer)
 
 ---
 
-## 2026-04-21 — Iteration 9: Drill-down Dashboards + Badge Removal
-## 2026-04-21 — Iteration 8: Mobile-First Overhaul
+## Earlier: Iter 8/9/10 — mobile-first, drill-downs, role hardening, global search, contacts, reminders
 ## 2026-04-20 — Modules 13-14
 ## 2026-04-19 — Modules 11-12
 ## Earlier — Modules 1-10
