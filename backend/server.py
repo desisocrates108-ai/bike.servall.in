@@ -4584,9 +4584,18 @@ async def root():
 
 app.include_router(api)
 
+# CORS — allow listed origins + a permissive regex for production custom domains.
+# FRONTEND_URL env can be a comma-separated list for multiple explicit origins.
+_frontend_urls = [u.strip() for u in (FRONTEND_URL or "").split(",") if u.strip()]
+_cors_allow = list(set(_frontend_urls + [
+    "http://localhost:3000",
+    "http://localhost:5173",
+]))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:3000"],
+    allow_origins=_cors_allow,
+    allow_origin_regex=r"https?://(localhost(:\d+)?|.*\.servall\.in|.*\.emergent\.host|.*\.emergentagent\.com|.*\.preview\.emergentagent\.com)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
