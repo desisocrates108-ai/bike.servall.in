@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import { toast } from "sonner";
-import { Zap, Save } from "lucide-react";
+import { Zap, Save, AlertTriangle, Trash2 } from "lucide-react";
 
 const TRIGGERS = [
   { key: "inquiry_created", label: "New Inquiry", desc: "Auto-send message when a lead is created" },
@@ -199,7 +199,73 @@ export default function Integrations() {
             Use <a href="/campaigns" className="text-brand font-semibold hover:underline">Campaigns</a> to send bulk messages to selected leads by stage, branch, or source.
           </div>
         </section>
+
+        {isSuper && <DangerZone />}
       </div>
     </>
+  );
+}
+
+function DangerZone() {
+  const [busy, setBusy] = useState(false);
+  const [text, setText] = useState("");
+
+  const purge = async () => {
+    if (text !== "PURGE") {
+      toast.error("Type PURGE in the box first");
+      return;
+    }
+    if (!window.confirm("⚠️ This permanently deletes ALL leads, files, follow-ups, deliveries, bookings, campaigns, and all non-super-admin users. Branches and master data are kept. Are you ABSOLUTELY sure?")) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data } = await api.post("/admin/purge-demo-data", null, {
+        params: { confirm: "SERVALL_PURGE" },
+      });
+      const total = Object.values(data.stats || {}).reduce((s, n) => s + (typeof n === "number" ? n : 0), 0);
+      toast.success(`Purged ${total} records. System is now in production mode.`);
+      setText("");
+      // Reload after 1.5s so user sees toast
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Purge failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="border-2 border-rose-300 rounded-sm p-4 sm:p-5 bg-rose-50/30 mt-4" data-testid="sec-danger-zone">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle className="w-5 h-5 text-rose-600" />
+        <div className="font-display font-bold text-rose-700 uppercase tracking-wider text-sm">Danger Zone — Production Reset</div>
+      </div>
+      <div className="text-sm text-zinc-700 mb-3">
+        Wipes ALL transactional data permanently — leads, files, follow-ups, deliveries, bookings, campaigns, audit logs, and all non-super-admin users.
+        <br />
+        <span className="text-emerald-700 font-semibold">Preserved:</span> Branches, master data (brands/models/colors), default WA templates, and your super-admin account.
+      </div>
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+        <div className="flex-1">
+          <Label className="overline">Type <span className="font-mono font-bold text-rose-700">PURGE</span> to enable</Label>
+          <Input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="PURGE"
+            className="font-mono"
+            data-testid="purge-confirm-input"
+          />
+        </div>
+        <Button
+          onClick={purge}
+          disabled={busy || text !== "PURGE"}
+          className="bg-rose-600 hover:bg-rose-700 text-white rounded-sm h-11 px-6"
+          data-testid="purge-btn"
+        >
+          <Trash2 className="w-4 h-4 mr-2" /> {busy ? "Purging…" : "Reset all demo data"}
+        </Button>
+      </div>
+    </section>
   );
 }
