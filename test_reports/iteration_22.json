@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 22 testing complete — backend pytest 5/5 PASS, frontend Playwright 100% PASS. Validated the WA-tab → Follow-ups dual-panel migration: tab-whatsapp removed from LeadDetail; Follow-ups tab now has Call History (left) and embedded WhatsappSection (right, testid 'followup-whatsapp-panel'); quick-call-btn renders tel: href when phone exists; Call History filters out type='WhatsApp' followups while DB still persists them via /api/leads/{id}/followups GET; backend regression confirmed for /constants followup_types, /api/leads/{id}/followups POST/GET (Call + WhatsApp), and /api/leads/{id}/wa-messages GET/POST.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter22_wa_in_followup.py",
+    "/app/test_reports/pytest/iter22_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LeadDetail.jsx Follow-ups tab uses an inline IIFE `(() => { const callLog = followups.filter(f => f.type !== 'WhatsApp'); ... })()` (line 654-695). Functionally correct but slightly unusual; a memoized const above the JSX would be cleaner. Non-blocking.",
+    "Filtering by string equality `f.type !== 'WhatsApp'` is fine since FOLLOWUP_TYPES is a fixed enum on the backend, but if FOLLOWUP_TYPES is ever localized/i18n'd this filter would silently break. Consider centralizing in a constants util.",
+    "When `lead.phone` is falsy, quick-call-btn renders `<a href={undefined}>` — anchor still receives clicks and routes to current URL. Consider using a <button disabled> or `pointer-events:none` to be safer. Today rendered class adds `cursor-not-allowed` so visually fine.",
+    "WhatsappSection is now mounted in BOTH the WhatsApp side-nav route (/whatsapp) and inside Follow-ups for every Lead detail render. Two parallel SSE/poll subscriptions are theoretically possible per lead view; verify only one `wa-messages` GET happens on tab switch. (Saw a single GET in network tab during testing, so OK.)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter22_wa_in_followup.py"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100%"},
+  "test_credentials": "superadmin@dealer.com / super123",
+  "seed_data_creation": "Backend: 3 TEST_Iter22 leads created (Call / WAType / WAMsg) with associated followups + wa_messages, all torn down via TestZCleanup mongo delete_many on customer_name regex. Frontend: reused existing seed lead 'Diksh' (c8910fb5...) — only added 1 WhatsApp-typed followup which was deleted via cascading lead delete (in cleanup step), so existing seed unchanged.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-22 delivered: (1) LeadDetail.jsx removed tab-whatsapp trigger and TabsContent value='whatsapp' (Iter21 had 11 tabs; now 10 + optional Exchange = 9-10). (2) Follow-ups tab grid: `lg:grid-cols-2` Call History on left (filters f.type !== 'WhatsApp', testids 'quick-call-btn' + 'call-history-{id}'), WhatsappSection on right (testid 'followup-whatsapp-panel'). (3) Backend untouched — FOLLOWUP_TYPES still ['Call','WhatsApp','Visit','Test Ride','Other'], /api/leads/{id}/wa-messages GET/POST 100% functional. Note for next iter: FOLLOWUP_MIN_GAP_SECONDS=60 means same-lead rapid POST returns 429 — backend tests sidestep by creating separate lead per test; frontend is safe since manual UI clicks naturally have >60s gap. WhatsApp tab still exists on global side-nav at /whatsapp — only the per-lead tab was removed.",
+  "rca of the issue": "N/A — no issues; iter22 implementation matches spec exactly."
+}

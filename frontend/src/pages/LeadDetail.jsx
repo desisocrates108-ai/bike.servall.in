@@ -462,7 +462,6 @@ export default function LeadDetail() {
           <TabsTrigger value="delivery" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-delivery">Delivery</TabsTrigger>
           <TabsTrigger value="registration" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-registration">Registration</TabsTrigger>
           <TabsTrigger value="documents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-documents">Documents ({(lead.documents || []).length})</TabsTrigger>
-          <TabsTrigger value="whatsapp" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="timeline" className="rounded-none border-b-2 border-transparent data-[state=active]:border-zinc-900 data-[state=active]:shadow-none px-0 pb-2" data-testid="tab-timeline">Timeline</TabsTrigger>
         </TabsList>
 
@@ -640,46 +639,65 @@ export default function LeadDetail() {
             </form>
           </Card>
 
-          <div className="bg-white border border-zinc-200 rounded-sm">
-            {followups.length === 0 && <div className="p-6 text-sm text-zinc-400">No follow-ups logged yet.</div>}
-            {followups.map((f) => (
-              <div key={f.id} className={`p-4 border-b border-zinc-100 last:border-0 ${isMissed(f) ? "bg-rose-50" : ""}`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="overline">{f.type}</span>
-                      {f.call_status && (
-                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm ${f.call_status === "Connected" ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
-                          {f.call_status}
-                        </span>
-                      )}
-                      {f.customer_response && (
-                        <span className={`text-xs font-semibold ${responseColor[f.customer_response] || "text-zinc-600"}`}>
-                          {f.customer_response}
-                        </span>
-                      )}
-                      {f.outcome_tag && (
-                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-blue-100 text-blue-700">
-                          {f.outcome_tag}
-                        </span>
-                      )}
-                      {f.call_duration && (
-                        <span className="text-xs font-mono text-zinc-500">{f.call_duration}s</span>
-                      )}
-                      {isMissed(f) && (
-                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-rose-600 text-white">Missed</span>
-                      )}
-                    </div>
-                    <div className="text-sm mt-1">{f.notes || <span className="text-zinc-400">(No notes)</span>}</div>
-                    <div className="text-xs text-zinc-500 mt-2">
-                      <User className="w-3 h-3 inline mr-1" />{f.created_by_name} · {new Date(f.created_at).toLocaleString()}
-                      {f.scheduled_date && <span className="ml-3 font-mono">Next: {f.scheduled_date} {f.scheduled_time || ""}</span>}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white border border-zinc-200 rounded-sm">
+              <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between">
+                <div className="overline flex items-center gap-2"><PhoneCall className="w-3.5 h-3.5" /> Call & Visit History</div>
+                <a
+                  href={lead.phone ? `tel:${lead.phone}` : undefined}
+                  className={`text-[11px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm border ${lead.phone ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-zinc-200 text-zinc-400 cursor-not-allowed"}`}
+                  data-testid="quick-call-btn"
+                >
+                  Call now
+                </a>
+              </div>
+              {(() => {
+                const callLog = followups.filter((f) => f.type !== "WhatsApp");
+                if (callLog.length === 0) return <div className="p-6 text-sm text-zinc-400">No calls / visits logged yet.</div>;
+                return callLog.map((f) => (
+                  <div key={f.id} className={`p-4 border-b border-zinc-100 last:border-0 ${isMissed(f) ? "bg-rose-50" : ""}`} data-testid={`call-history-${f.id}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="overline">{f.type}</span>
+                          {f.call_status && (
+                            <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm ${f.call_status === "Connected" ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+                              {f.call_status}
+                            </span>
+                          )}
+                          {f.customer_response && (
+                            <span className={`text-xs font-semibold ${responseColor[f.customer_response] || "text-zinc-600"}`}>
+                              {f.customer_response}
+                            </span>
+                          )}
+                          {f.outcome_tag && (
+                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-blue-100 text-blue-700">
+                              {f.outcome_tag}
+                            </span>
+                          )}
+                          {f.call_duration && (
+                            <span className="text-xs font-mono text-zinc-500">{f.call_duration}s</span>
+                          )}
+                          {isMissed(f) && (
+                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-rose-600 text-white">Missed</span>
+                          )}
+                        </div>
+                        <div className="text-sm mt-1">{f.notes || <span className="text-zinc-400">(No notes)</span>}</div>
+                        <div className="text-xs text-zinc-500 mt-2">
+                          <User className="w-3 h-3 inline mr-1" />{f.created_by_name} · {new Date(f.created_at).toLocaleString()}
+                          {f.scheduled_date && <span className="ml-3 font-mono">Next: {f.scheduled_date} {f.scheduled_time || ""}</span>}
+                        </div>
+                      </div>
+                      {f.done ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <Clock className="w-5 h-5 text-zinc-400" />}
                     </div>
                   </div>
-                  {f.done ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <Clock className="w-5 h-5 text-zinc-400" />}
-                </div>
-              </div>
-            ))}
+                ));
+              })()}
+            </div>
+
+            <div data-testid="followup-whatsapp-panel">
+              <WhatsappSection lead={lead} constants={constants} onReload={reload} />
+            </div>
           </div>
         </TabsContent>
 
@@ -866,10 +884,6 @@ export default function LeadDetail() {
 
         <TabsContent value="documents" className="pt-6">
           <DocumentsSection lead={lead} constants={constants} onReload={reload} />
-        </TabsContent>
-
-        <TabsContent value="whatsapp" className="pt-6">
-          <WhatsappSection lead={lead} constants={constants} onReload={reload} />
         </TabsContent>
 
         <TabsContent value="timeline" className="pt-6">
