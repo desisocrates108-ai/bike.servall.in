@@ -1,0 +1,39 @@
+{
+  "summary": "Iter-18 (Phases 1+2+3) full backend & frontend smoke testing. Backend pytest suite (19 tests) → 100% PASS. Frontend Stock page, LeadForm simplification, and ShowAdvanced toggle visually verified. All 12 listed test cases pass at the API level; UI key elements rendered correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_simplification.py",
+    "/app/test_reports/pytest/pytest_results_iter18.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: 2 leftover booked TEST chassis (TESTBKBAC74C54, TESTBKACCB6120) remain in inventory because they are 'booked'. They will surface as test residue on the /stock page until the corresponding TEST_Iter18 leads' bookings are cancelled. Consider adding a teardown that cancels bookings then deletes inventory, or a super-admin force-delete endpoint."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~4848 lines — recommend splitting into modules (auth, leads, bookings, inventory, masters, whatsapp, campaigns) per code review guideline (>700 lines). Hot reload still fine but maintainability suffers.",
+    "POST /api/inventory and DELETE /api/inventory/{id} use get_current_user + an inline role check instead of require_roles('admin','super_admin'). Functionally fine, but inconsistent with rest of codebase (use Depends(require_roles(...)) for clarity & RBAC test coverage).",
+    "STAGES list contains 9 entries but stage_order in /booking endpoint relies on positional index — if STAGES is reordered later, Booking Hold (index 4) vs Booking (index 3) is correct only because Booking comes before Booking Hold. The current order works (Token=Hold > Booking) but is fragile; consider explicit precedence map.",
+    "/leads/{lid}/stage validation block has a duplicated `if body.stage == 'Follow-up'` (line 1518 and 1525) — second one expects 'Follow-up' but its check (Connected+Interested) reads more like an Interest-stage gate. Now that Interest stage was removed via STAGE_ALIAS, this logic effectively double-runs on Follow-up and may surprise users.",
+    "performance() and branch-compare include legacy stage names (e.g., {'$in': ['Delivered','RTO','Delivered']}) — duplicate 'Delivered' string and missing 'Booking Hold' in pending counts."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_simplification.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19)",
+    "frontend": "100% on critical-path smoke (Stock page, LeadForm visibility, Show advanced toggle)"
+  },
+  "test_credentials": "superadmin@dealer.com / super123 (only active account post-purge)",
+  "seed_data_creation": "Test created TEST_Iter18 leads + TEST*-prefixed inventory chassis. Cleanup test removed all available items + leads; 2 booked chassis remain in DB (linked to deleted leads — orphaned-but-locked). DB is otherwise clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter18_simplification.py is the regression suite for iter-18 stages, inventory CRUD, CSV upload idempotency, exchange-photos PAN/RC buckets, and booking payment_type Token/Full + chassis lock. All 9 STAGES, /admin/migrate-stages (idempotent), and 'Walk-in' default source are validated. To re-run: REACT_APP_BACKEND_URL=https://servall-mobile.preview.emergentagent.com pytest backend/tests/test_iter18_simplification.py -v. 2 leftover booked TEST chassis remain — manual mongo cleanup if needed.",
+  "rca of the issue": "No issues found — full pass."
+}

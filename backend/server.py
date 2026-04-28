@@ -51,8 +51,16 @@ logger = logging.getLogger("crm")
 LEAD_SOURCES = ["Walk-in", "Tele-in", "Digital Marketing", "Social Media",
                 "WhatsApp", "Email", "Referral", "Offline", "Cold Calling"]
 PRIORITIES = ["Hot", "Warm", "Cold"]
-STAGES = ["Inquiry", "Follow-up", "Interest", "Test Ride", "Deal",
-          "Booking", "Allotment", "Delivery", "Registration", "Feedback", "Lost"]
+STAGES = ["Inquiry", "Follow-up", "Test Ride", "Booking", "Booking Hold",
+          "Allotment", "RTO", "Delivered", "Lost"]
+# Backward-compat mapping for legacy stage names (used during migration + read shim)
+STAGE_ALIAS = {
+    "Interest": "Follow-up",
+    "Deal": "Booking",
+    "Delivery": "Delivered",
+    "Registration": "RTO",
+    "Feedback": "Delivered",
+}
 PAYMENT_MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Finance"]
 FOLLOWUP_TYPES = ["Call", "WhatsApp", "Visit", "Test Ride", "Other"]
 CALL_STATUSES = ["Connected", "Not Connected"]
@@ -100,8 +108,8 @@ CAMPAIGN_STATUSES = ["Draft", "Scheduled", "Running", "Completed", "Cancelled"] 
 DOC_REQUIREMENTS = {
     "Booking": ["Aadhaar Card"],
     "Finance": ["Aadhaar Card", "PAN Card", "Bank Statement"],
-    "Registration": ["Aadhaar Card", "PAN Card", "RTO Form 20", "RTO Form 21"],
-    "Delivery": ["Aadhaar Card", "Invoice"],
+    "RTO": ["Aadhaar Card", "PAN Card", "RTO Form 20", "RTO Form 21"],
+    "Delivered": ["Aadhaar Card", "Invoice"],
 }
 ROLES = ["super_admin", "admin", "sales_executive"]
 
@@ -323,14 +331,17 @@ class LeadCreate(BaseModel):
     alt_phone: Optional[str] = None
     birthdate: Optional[str] = None
     address: Optional[str] = None
-    source: str
-    branch_id: str
+    city: Optional[str] = None
+    source: Optional[str] = "Walk-in"
+    branch_id: Optional[str] = None
     priority: str = "Warm"
     assigned_to: Optional[str] = None  # user id, if None auto-assign
     brand_id: Optional[str] = None
     model_id: Optional[str] = None
     variant_id: Optional[str] = None
     color_id: Optional[str] = None
+    vehicle_type: Optional[str] = None  # Bike / Scooty
+    test_ride_done: Optional[bool] = None
     purchase_type: Optional[str] = "New Purchase"  # or "Exchange Vehicle"
     exchange: Optional[ExchangeInfo] = None
     deal: Optional[DealInfo] = None
@@ -347,6 +358,7 @@ class LeadUpdate(BaseModel):
     alt_phone: Optional[str] = None
     birthdate: Optional[str] = None
     address: Optional[str] = None
+    city: Optional[str] = None
     source: Optional[str] = None
     branch_id: Optional[str] = None
     priority: Optional[str] = None
@@ -355,6 +367,8 @@ class LeadUpdate(BaseModel):
     model_id: Optional[str] = None
     variant_id: Optional[str] = None
     color_id: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    test_ride_done: Optional[bool] = None
     purchase_type: Optional[str] = None
     exchange: Optional[ExchangeInfo] = None
     deal: Optional[DealInfo] = None
@@ -414,6 +428,9 @@ class BookingIn(BaseModel):
     loan_status: Optional[str] = None
     exchange_final_value: Optional[float] = None
     notes: Optional[str] = None
+    payment_type: Optional[str] = "Token"  # "Token" or "Full"
+    inventory_id: Optional[str] = None     # picked from /inventory
+    chassis_number: Optional[str] = None   # locked chassis from inventory
 
 
 class BookingUpdate(BaseModel):
@@ -430,6 +447,9 @@ class BookingUpdate(BaseModel):
     loan_status: Optional[str] = None
     exchange_final_value: Optional[float] = None
     notes: Optional[str] = None
+    payment_type: Optional[str] = None
+    inventory_id: Optional[str] = None
+    chassis_number: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -921,11 +941,11 @@ async def user_performance(uid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(403, "Access denied")
     leads_total = await db.leads.count_documents({"assigned_to": uid})
     leads_lost = await db.leads.count_documents({"assigned_to": uid, "stage": "Lost"})
-    leads_delivered = await db.leads.count_documents({"assigned_to": uid, "stage": {"$in": ["Delivery", "Registration", "Feedback"]}})
+    leads_delivered = await db.leads.count_documents({"assigned_to": uid, "stage": {"$in": ["Delivered", "RTO", "Delivered"]}})
     followups_total = await db.followups.count_documents({"created_by": uid})
     pending = await db.leads.count_documents({
         "assigned_to": uid,
-        "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}
+        "stage": {"$nin": ["Lost", "Delivered", "RTO", "Delivered"]}
     })
     conv_rate = round((leads_delivered / leads_total * 100), 1) if leads_total else 0.0
     return {
@@ -1041,7 +1061,7 @@ async def branch_performance(bid: str, user: dict = Depends(get_current_user)):
     leads_total = await db.leads.count_documents({"branch_id": bid})
     leads_lost = await db.leads.count_documents({"branch_id": bid, "stage": "Lost"})
     leads_delivered = await db.leads.count_documents({
-        "branch_id": bid, "stage": {"$in": ["Delivery", "Registration", "Feedback"]}
+        "branch_id": bid, "stage": {"$in": ["Delivered", "RTO", "Delivered"]}
     })
     users_count = await db.users.count_documents({"branch_id": bid, "is_active": True})
     # Revenue: sum of bookings.final_deal_price for delivered bookings in this branch
@@ -1074,7 +1094,7 @@ async def branches_compare(user: dict = Depends(require_roles("super_admin"))):
         leads_total = await db.leads.count_documents({"branch_id": b["id"]})
         leads_lost = await db.leads.count_documents({"branch_id": b["id"], "stage": "Lost"})
         leads_delivered = await db.leads.count_documents({
-            "branch_id": b["id"], "stage": {"$in": ["Delivery", "Registration", "Feedback"]}
+            "branch_id": b["id"], "stage": {"$in": ["Delivered", "RTO", "Delivered"]}
         })
         pipeline = [
             {"$match": {"branch_id": b["id"], "status": "Delivered"}},
@@ -1280,7 +1300,7 @@ async def list_leads(
 
 @api.post("/leads")
 async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
-    if body.source not in LEAD_SOURCES:
+    if body.source and body.source not in LEAD_SOURCES:
         raise HTTPException(400, "Invalid source")
     if body.priority not in PRIORITIES:
         raise HTTPException(400, "Invalid priority")
@@ -1292,9 +1312,14 @@ async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
     elif user["role"] == "admin":
         if user.get("branch_id"):
             body.branch_id = user["branch_id"]
+    # Super admin: if no branch given, fall back to first active branch
+    if not body.branch_id and user["role"] == "super_admin":
+        any_branch = await db.branches.find_one({"is_active": {"$ne": False}}, {"_id": 0})
+        if any_branch:
+            body.branch_id = any_branch["id"]
     branch = await db.branches.find_one({"id": body.branch_id}, {"_id": 0})
     if not branch:
-        raise HTTPException(400, "Invalid branch")
+        raise HTTPException(400, "Invalid branch — please contact admin")
     if branch.get("is_active") is False:
         raise HTTPException(403, "Branch is inactive — cannot create new leads")
     assigned_to = body.assigned_to
@@ -1472,18 +1497,15 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
         identity = lead.get("identity_docs") or {}
         missing_id = []
         if not (identity.get("aadhaar") or []):
-            missing_id.append("Aadhaar Front")
-        if not (identity.get("aadhaar_back") or []):
-            missing_id.append("Aadhaar Back")
+            missing_id.append("Aadhaar")
         if missing_id:
             raise HTTPException(400, f"Upload required KYC documents before advancing: {', '.join(missing_id)}")
         if (lead.get("purchase_type") or "") == "Exchange Vehicle":
             exch_docs = (lead.get("exchange") or {}).get("documents") or {}
             missing_ex = []
-            if not (exch_docs.get("rc_front") or []):
-                missing_ex.append("RC Front")
-            if not (exch_docs.get("rc_back") or []):
-                missing_ex.append("RC Back")
+            rc_combined = (exch_docs.get("rc") or []) + (exch_docs.get("rc_front") or []) + (exch_docs.get("rc_back") or [])
+            if not rc_combined:
+                missing_ex.append("RC Book")
             if not (exch_docs.get("front_photo") or []):
                 missing_ex.append("Vehicle Front Photo")
             if not (exch_docs.get("back_photo") or []):
@@ -1500,7 +1522,7 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
             raise HTTPException(400, "Select a vehicle (brand/model) before Follow-up")
 
     # Follow-up → Interest: at least 1 successful follow-up (Connected + Interested)
-    if body.stage == "Interest":
+    if body.stage == "Follow-up":
         interested = await db.followups.count_documents({
             "lead_id": lid,
             "call_status": "Connected",
@@ -1510,7 +1532,7 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
             raise HTTPException(400, "Need at least one Connected follow-up marked 'Interested' before Interest stage")
 
     # Interest → Deal: brand, model, budget (customer_expected_price) required
-    if body.stage == "Deal":
+    if body.stage == "Booking":
         if not lead.get("brand_id"):
             raise HTTPException(400, "Brand is required before Deal")
         if not lead.get("model_id"):
@@ -1540,12 +1562,12 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
             raise HTTPException(400, "Booking amount is required before Allotment")
 
     # Allotment → Delivery: chassis number required
-    if body.stage == "Delivery":
+    if body.stage == "Delivered":
         allotment = await db.allotments.find_one({"lead_id": lid}, {"_id": 0})
         if not allotment or not allotment.get("chassis_number"):
             raise HTTPException(400, "Chassis number (allotment) is required before Delivery")
 
-    if body.stage == "Registration":
+    if body.stage == "RTO":
         # Payment must be fully paid
         booking = await db.bookings.find_one({"lead_id": lid, "status": {"$ne": "Cancelled"}}, {"_id": 0})
         if booking:
@@ -1555,7 +1577,7 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
                 raise HTTPException(400, f"Full payment (₹{final}) must be completed before Registration. Paid: ₹{paid}")
         # Module 7 enforcement: all required Registration docs must be Verified
         lead_docs = await db.documents.find({"lead_id": lid, "is_latest": True}, {"_id": 0}).to_list(200)
-        missing = _stage_doc_requirements("Registration", lead_docs)
+        missing = _stage_doc_requirements("RTO", lead_docs)
         if missing:
             raise HTTPException(400, f"Missing verified documents for Registration: {', '.join(missing)}")
     if body.stage == "Lost":
@@ -1584,7 +1606,7 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
     except Exception as _e:
         logger.warning(f"stage_changed fire_event failed: {_e}")
     # Audit: special flag for deal closure (conversions)
-    action = "deal_closed" if body.stage in ("Delivery", "Registration", "Feedback") else "stage_changed"
+    action = "deal_closed" if body.stage in ("Delivered", "RTO", "Delivered") else "stage_changed"
     if body.stage == "Lost":
         action = "lead_lost"
     await log_audit(user, action, entity_type="lead", entity_id=lid,
@@ -1746,7 +1768,7 @@ async def list_tasks(kind: str = Query("today"),
         q.update({"next_followup_date": today})
     elif kind == "missed":
         q.update({"next_followup_date": {"$lt": today},
-                  "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}})
+                  "stage": {"$nin": ["Lost", "Delivered", "RTO", "Delivered"]}})
     elif kind == "upcoming":
         q.update({"next_followup_date": {"$gt": today}})
     elif kind == "at_risk":
@@ -1884,14 +1906,14 @@ async def analytics_summary(
     async for row in db.leads.aggregate(pipeline2):
         per_stage[row["_id"] or "Unknown"] = row["count"]
 
-    converted = await db.leads.count_documents({**base, "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]}})
+    converted = await db.leads.count_documents({**base, "stage": {"$in": ["Booking", "Delivered", "RTO", "Delivered"]}})
     lost = await db.leads.count_documents({**base, "stage": "Lost"})
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     due_today = await db.leads.count_documents({**base, "next_followup_date": today})
     missed = await db.leads.count_documents({**base,
                                              "next_followup_date": {"$lt": today},
-                                             "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}})
+                                             "stage": {"$nin": ["Lost", "Delivered", "RTO", "Delivered"]}})
     upcoming = await db.leads.count_documents({**base, "next_followup_date": {"$gt": today}})
     at_risk = await db.leads.count_documents({**base, "at_risk": True})
 
@@ -1899,7 +1921,7 @@ async def analytics_summary(
     conversion_rate = round((converted / total) * 100, 1) if total else 0.0
 
     # Deals in progress
-    deals_in_progress = await db.leads.count_documents({**base, "stage": "Deal"})
+    deals_in_progress = await db.leads.count_documents({**base, "stage": "Booking"})
     # Avg discount
     avg_discount = 0.0
     pipeline3 = [{"$match": {**base, "deal.discount": {"$gt": 0}}},
@@ -2019,7 +2041,7 @@ async def analytics_calendar(
 
     # 4) Overdue / upcoming from leads.next_followup_date within range
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    overdue_stages = ["Lost", "Delivery", "Registration", "Feedback"]
+    overdue_stages = ["Lost", "Delivered", "RTO", "Delivered"]
     lead_fu_q: Dict[str, Any] = {
         "next_followup_date": {"$gte": start_iso, "$lt": next_month_start},
         "stage": {"$nin": overdue_stages},
@@ -2077,10 +2099,10 @@ async def analytics_performance(
     for e in execs:
         lq = {**lead_base, "assigned_to": e["id"]}
         total = await db.leads.count_documents(lq)
-        converted = await db.leads.count_documents({**lq, "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]}})
+        converted = await db.leads.count_documents({**lq, "stage": {"$in": ["Booking", "Delivered", "RTO", "Delivered"]}})
         lost = await db.leads.count_documents({**lq, "stage": "Lost"})
         missed = await db.leads.count_documents({**lq, "next_followup_date": {"$lt": today},
-                                                  "stage": {"$nin": ["Lost", "Delivery", "Registration", "Feedback"]}})
+                                                  "stage": {"$nin": ["Lost", "Delivered", "RTO", "Delivered"]}})
         at_risk = await db.leads.count_documents({**lq, "at_risk": True})
         fu_total = await db.followups.count_documents({"assigned_to": e["id"]})
         fu_connected = await db.followups.count_documents({"assigned_to": e["id"], "call_status": "Connected"})
@@ -2167,6 +2189,30 @@ async def create_booking(lid: str, body: BookingIn, user: dict = Depends(get_cur
     if body.loan_status and body.loan_status not in LOAN_STATUSES:
         raise HTTPException(400, "Invalid loan status")
 
+    # Stock & chassis lock — if inventory_id provided, validate availability and lock it
+    locked_chassis = None
+    locked_inv_id = None
+    if body.inventory_id:
+        inv = await db.inventory.find_one({"id": body.inventory_id}, {"_id": 0})
+        if not inv:
+            raise HTTPException(400, "Selected inventory item not found")
+        if inv.get("status") != "available":
+            raise HTTPException(400, f"This vehicle is already {inv.get('status')} — please pick another")
+        # Verify model/variant alignment if provided
+        locked_chassis = inv.get("chassis_number")
+        locked_inv_id = inv.get("id")
+    elif body.chassis_number:
+        # Allow free-text chassis but check no other booking has it
+        dup = await db.bookings.find_one({"chassis_number": body.chassis_number, "status": {"$ne": "Cancelled"}}, {"_id": 0})
+        if dup:
+            raise HTTPException(400, f"Chassis {body.chassis_number} is already booked on another lead")
+        locked_chassis = body.chassis_number
+
+    # payment_type — Token implies Booking Hold; Full → straight to Booking
+    pay_type = (body.payment_type or "Token").strip()
+    if pay_type not in ("Token", "Full"):
+        pay_type = "Token"
+
     bid = str(uuid.uuid4())
     doc = {
         "id": bid,
@@ -2186,6 +2232,9 @@ async def create_booking(lid: str, body: BookingIn, user: dict = Depends(get_cur
         "pending_amount": float(final_price),
         "payment_status": "Pending",
         "status": "Pending",
+        "payment_type": pay_type,
+        "inventory_id": locked_inv_id,
+        "chassis_number": locked_chassis,
         "finance_company": body.finance_company,
         "down_payment": body.down_payment,
         "emi": body.emi,
@@ -2200,15 +2249,31 @@ async def create_booking(lid: str, body: BookingIn, user: dict = Depends(get_cur
     }
     await db.bookings.insert_one(doc)
     doc.pop("_id", None)
-    # Auto-advance lead stage to Booking if earlier
+
+    # Lock the inventory item
+    if locked_inv_id:
+        await db.inventory.update_one(
+            {"id": locked_inv_id},
+            {"$set": {
+                "status": "booked",
+                "booked_lead_id": lid,
+                "booked_booking_id": bid,
+                "updated_at": now_iso(),
+            }},
+        )
+
+    # Auto-advance lead stage — Token → Booking Hold; Full → Booking
+    target_stage = "Booking Hold" if pay_type == "Token" else "Booking"
     stage_order = {s: i for i, s in enumerate(STAGES)}
-    if stage_order.get(lead.get("stage"), 0) < stage_order["Booking"]:
+    if stage_order.get(lead.get("stage"), 0) < stage_order[target_stage]:
         await db.leads.update_one({"id": lid},
-                                  {"$set": {"stage": "Booking", "updated_at": now_iso()}})
+                                  {"$set": {"stage": target_stage, "updated_at": now_iso()}})
         await add_timeline(lid, "Stage Changed", user,
-                           {"from": lead.get("stage"), "to": "Booking", "via": "booking_created"})
+                           {"from": lead.get("stage"), "to": target_stage, "via": "booking_created"})
     await add_timeline(lid, "Booking Created", user,
                        {"booking_amount": body.booking_amount,
+                        "payment_type": pay_type,
+                        "chassis_number": locked_chassis,
                         "expected_delivery_date": body.expected_delivery_date})
     return doc
 
@@ -2609,8 +2674,8 @@ async def list_exchange_valuations(lid: str, user: dict = Depends(get_current_us
     return await db.exchange_valuations.find({"lead_id": lid}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
 
-IDENTITY_DOC_TYPES = {"aadhaar", "aadhaar_back", "other"}
-EXCHANGE_DOC_TYPES = {"rc_front", "rc_back", "rc_pdf", "front_photo", "back_photo", "rc_book"}
+IDENTITY_DOC_TYPES = {"aadhaar", "aadhaar_back", "pan", "bank_passbook", "other"}
+EXCHANGE_DOC_TYPES = {"rc", "rc_front", "rc_back", "rc_pdf", "front_photo", "back_photo", "rc_book"}
 LEGACY_PHOTO_TYPE = "photo"
 
 
@@ -2767,11 +2832,11 @@ async def create_allotment(bid: str, body: AllotmentIn, user: dict = Depends(get
 
     # Auto-advance lead to Delivery
     stage_order = {s: i for i, s in enumerate(STAGES)}
-    if stage_order.get(lead.get("stage"), 0) < stage_order["Delivery"]:
+    if stage_order.get(lead.get("stage"), 0) < stage_order["Delivered"]:
         await db.leads.update_one({"id": lead["id"]},
-                                  {"$set": {"stage": "Delivery", "updated_at": now_iso()}})
+                                  {"$set": {"stage": "Delivered", "updated_at": now_iso()}})
         await add_timeline(lead["id"], "Stage Changed", user,
-                           {"from": lead.get("stage"), "to": "Delivery", "via": "allotment"})
+                           {"from": lead.get("stage"), "to": "Delivered", "via": "allotment"})
     await add_timeline(lead["id"], "Vehicle Allotted", user,
                        {"chassis_number": chassis, "engine_number": doc["engine_number"]})
     return doc
@@ -3602,7 +3667,7 @@ def _campaign_filter_to_query(target: dict, scope: Dict[str, Any]) -> Dict[str, 
     if t.get("stages"):
         audience = t.get("audience") or "leads"
         if audience == "past_buyers":
-            q["stage"] = {"$in": ["Delivery", "Registration", "Feedback"]}
+            q["stage"] = {"$in": ["Delivered", "RTO", "Delivered"]}
         elif audience == "all":
             pass
         else:
@@ -3770,7 +3835,7 @@ async def campaign_stats(cid: str, user: dict = Depends(require_roles("super_adm
     })
     conversions = await db.leads.count_documents({
         "id": {"$in": lead_ids},
-        "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]},
+        "stage": {"$in": ["Booking", "Delivered", "RTO", "Delivered"]},
     })
     stats["responses"] = responses
     stats["conversions"] = conversions
@@ -3940,7 +4005,7 @@ async def complete_delivery(did: str, user: dict = Depends(get_current_user)):
 
     # Documents: all mandatory-for-delivery types must be Verified
     docs = await db.documents.find({"lead_id": lead["id"], "is_latest": True}, {"_id": 0}).to_list(200)
-    missing = _stage_doc_requirements("Delivery", docs)
+    missing = _stage_doc_requirements("Delivered", docs)
     if missing:
         raise HTTPException(400, f"Missing verified documents: {', '.join(missing)}")
 
@@ -3952,10 +4017,10 @@ async def complete_delivery(did: str, user: dict = Depends(get_current_user)):
     }})
     # Advance lead stage
     await db.leads.update_one({"id": lead["id"]},
-                              {"$set": {"stage": "Registration", "updated_at": now_iso()}})
+                              {"$set": {"stage": "RTO", "updated_at": now_iso()}})
     await add_timeline(lead["id"], "Vehicle Delivered", user, {})
     await add_timeline(lead["id"], "Stage Changed", user,
-                       {"from": "Delivery", "to": "Registration", "via": "delivery_complete"})
+                       {"from": "Delivered", "to": "RTO", "via": "delivery_complete"})
     # WhatsApp post-delivery intents
     await _log_whatsapp(lead, "delivery_thank_you",
                         {"message": f"Thanks for buying with us, {lead.get('customer_name')}!"}, user)
@@ -4068,8 +4133,8 @@ async def analytics_deals(user: dict = Depends(get_current_user)):
     elif user["role"] == "admin":
         base["branch_id"] = user.get("branch_id")
 
-    in_progress = await db.leads.count_documents({**base, "stage": "Deal"})
-    booked = await db.leads.count_documents({**base, "stage": {"$in": ["Booking", "Delivery", "Registration", "Feedback"]}})
+    in_progress = await db.leads.count_documents({**base, "stage": "Booking"})
+    booked = await db.leads.count_documents({**base, "stage": {"$in": ["Booking", "Delivered", "RTO", "Delivered"]}})
     total_with_deal = await db.leads.count_documents({**base, "deal.final_deal_price": {"$gt": 0}})
     deal_to_booking_rate = round((booked / (in_progress + booked)) * 100, 1) if (in_progress + booked) else 0.0
 
@@ -4120,7 +4185,7 @@ async def purge_demo_data(
         "leads", "followups", "bookings", "deliveries", "allotments", "payments",
         "files", "documents", "exchange_valuations", "negotiation_history", "timeline",
         "campaigns", "automation_rules", "wa_messages", "whatsapp_logs",
-        "audit_logs", "finance_cases",
+        "audit_logs", "finance_cases", "inventory",
     ]
     for col in transactional:
         res = await db[col].delete_many({})
@@ -4160,6 +4225,186 @@ async def purge_demo_data(
 
 # ============================================================
 # Seed & startup
+
+# ============================================================
+# Inventory / Stock — chassis-level vehicle stock
+# ============================================================
+
+class InventoryItem(BaseModel):
+    brand: str
+    model: str
+    variant: Optional[str] = None
+    color: Optional[str] = None
+    chassis_number: str
+    engine_number: Optional[str] = None
+    branch_id: Optional[str] = None  # null = central / Bilimora hub
+    notes: Optional[str] = None
+
+
+@api.get("/inventory")
+async def list_inventory(
+    status: Optional[str] = None,
+    brand: Optional[str] = None,
+    model: Optional[str] = None,
+    variant: Optional[str] = None,
+    color: Optional[str] = None,
+    chassis: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    q: Dict[str, Any] = {}
+    if status:
+        q["status"] = status
+    if brand:
+        q["brand"] = {"$regex": f"^{brand}$", "$options": "i"}
+    if model:
+        q["model"] = {"$regex": f"^{model}$", "$options": "i"}
+    if variant:
+        q["variant"] = {"$regex": f"^{variant}$", "$options": "i"}
+    if color:
+        q["color"] = {"$regex": f"^{color}$", "$options": "i"}
+    if chassis:
+        q["chassis_number"] = {"$regex": chassis, "$options": "i"}
+    items = []
+    async for it in db.inventory.find(q, {"_id": 0}).sort("created_at", -1).limit(2000):
+        items.append(it)
+    return items
+
+
+@api.post("/inventory")
+async def add_inventory(body: InventoryItem, user: dict = Depends(get_current_user)):
+    if user.get("role") not in ("super_admin", "admin"):
+        raise HTTPException(403, "Only admin/super-admin can add stock")
+    chassis = (body.chassis_number or "").strip().upper()
+    if not chassis:
+        raise HTTPException(400, "Chassis number required")
+    dup = await db.inventory.find_one({"chassis_number": chassis}, {"_id": 0})
+    if dup:
+        raise HTTPException(400, f"Chassis {chassis} already exists in stock")
+    rec = {
+        "id": str(uuid.uuid4()),
+        "brand": body.brand.strip(),
+        "model": body.model.strip(),
+        "variant": (body.variant or "").strip() or None,
+        "color": (body.color or "").strip() or None,
+        "chassis_number": chassis,
+        "engine_number": (body.engine_number or "").strip() or None,
+        "branch_id": body.branch_id,
+        "status": "available",
+        "booked_lead_id": None,
+        "booked_booking_id": None,
+        "notes": body.notes,
+        "created_by": user["id"],
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.inventory.insert_one(rec)
+    rec.pop("_id", None)
+    return rec
+
+
+@api.delete("/inventory/{iid}")
+async def delete_inventory(iid: str, user: dict = Depends(get_current_user)):
+    if user.get("role") not in ("super_admin", "admin"):
+        raise HTTPException(403, "Only admin/super-admin can delete stock")
+    item = await db.inventory.find_one({"id": iid}, {"_id": 0})
+    if not item:
+        raise HTTPException(404, "Inventory item not found")
+    if item.get("status") == "booked":
+        raise HTTPException(400, "Cannot delete a booked vehicle — cancel its booking first")
+    await db.inventory.delete_one({"id": iid})
+    return {"ok": True}
+
+
+@api.post("/inventory/upload")
+async def upload_inventory_excel(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Bulk-upload inventory from CSV/Excel.
+    Required columns (case-insensitive): brand, model, chassis_number
+    Optional: variant, color, engine_number, branch_id, notes
+    Returns: {ok, added, skipped_duplicates, errors}
+    """
+    if user.get("role") not in ("super_admin", "admin"):
+        raise HTTPException(403, "Only admin/super-admin can upload stock")
+    raw = await file.read()
+    fname = (file.filename or "").lower()
+    rows: List[Dict[str, Any]] = []
+    try:
+        if fname.endswith(".csv") or "csv" in (file.content_type or ""):
+            import csv as _csv
+            import io as _io
+            txt = raw.decode("utf-8", errors="ignore")
+            reader = _csv.DictReader(_io.StringIO(txt))
+            rows = [{(k or "").strip().lower(): (v or "").strip() for k, v in r.items()} for r in reader]
+        elif fname.endswith(".xlsx") or fname.endswith(".xls"):
+            try:
+                from openpyxl import load_workbook
+                import io as _io
+                wb = load_workbook(filename=_io.BytesIO(raw), read_only=True)
+                ws = wb.active
+                headers = []
+                for ridx, row in enumerate(ws.iter_rows(values_only=True)):
+                    if ridx == 0:
+                        headers = [str(c or "").strip().lower() for c in row]
+                    else:
+                        d = {headers[i]: (str(c).strip() if c is not None else "") for i, c in enumerate(row) if i < len(headers)}
+                        if any(d.values()):
+                            rows.append(d)
+            except ImportError:
+                raise HTTPException(400, "Excel support unavailable — install openpyxl, or upload CSV instead")
+        else:
+            raise HTTPException(400, "Upload .csv or .xlsx file")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse file: {e}")
+
+    added = 0
+    skipped = 0
+    errors: List[str] = []
+    for i, r in enumerate(rows, start=2):  # row 2 = first data row in spreadsheet
+        chassis = (r.get("chassis_number") or r.get("chassis") or "").strip().upper()
+        brand = (r.get("brand") or "").strip()
+        model = (r.get("model") or "").strip()
+        if not chassis or not brand or not model:
+            errors.append(f"Row {i}: missing brand/model/chassis_number")
+            continue
+        dup = await db.inventory.find_one({"chassis_number": chassis}, {"_id": 0})
+        if dup:
+            skipped += 1
+            continue
+        rec = {
+            "id": str(uuid.uuid4()),
+            "brand": brand, "model": model,
+            "variant": r.get("variant") or None,
+            "color": r.get("color") or None,
+            "chassis_number": chassis,
+            "engine_number": (r.get("engine_number") or r.get("engine") or "").strip() or None,
+            "branch_id": r.get("branch_id") or None,
+            "status": "available",
+            "booked_lead_id": None,
+            "booked_booking_id": None,
+            "notes": r.get("notes") or None,
+            "created_by": user["id"],
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        await db.inventory.insert_one(rec)
+        added += 1
+    return {"ok": True, "added": added, "skipped_duplicates": skipped, "errors": errors[:50]}
+
+
+# Migrate legacy stage names → new simplified stages (idempotent)
+@api.post("/admin/migrate-stages")
+async def migrate_stages(user: dict = Depends(get_current_user)):
+    if user.get("role") != "super_admin":
+        raise HTTPException(403, "Only super admin")
+    counts: Dict[str, int] = {}
+    for old, new in STAGE_ALIAS.items():
+        res = await db.leads.update_many({"stage": old}, {"$set": {"stage": new, "updated_at": now_iso()}})
+        counts[f"{old}->{new}"] = res.modified_count
+    return {"ok": True, "migrated": counts}
+
+
+
 # ============================================================
 
 async def seed_data():
@@ -4402,7 +4647,7 @@ async def seed_data():
         activa = await db.vehicle_models.find_one({"name": "Activa 6G"}, {"_id": 0})
         sample_leads = [
             {"customer_name": "Rakesh Patel", "phone": "9876543210", "source": "Walk-in",
-             "priority": "Hot", "stage": "Interest"},
+             "priority": "Hot", "stage": "Follow-up"},
             {"customer_name": "Meera Shah", "phone": "9876501234", "source": "WhatsApp",
              "priority": "Warm", "stage": "Follow-up"},
             {"customer_name": "Arjun Desai", "phone": "9845012345", "source": "Digital Marketing",
@@ -4410,7 +4655,7 @@ async def seed_data():
             {"customer_name": "Kavita Joshi", "phone": "9812345678", "source": "Referral",
              "priority": "Hot", "stage": "Test Ride"},
             {"customer_name": "Sanjay Modi", "phone": "9823456789", "source": "Tele-in",
-             "priority": "Warm", "stage": "Deal",
+             "priority": "Warm", "stage": "Booking",
              "deal_c": 78000, "deal_o": 75000},
         ]
         for s in sample_leads:

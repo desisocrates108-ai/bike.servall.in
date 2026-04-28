@@ -23,6 +23,7 @@ import Contacts from "./pages/Contacts";
 import Reports from "./pages/Reports";
 import Reminders from "./pages/Reminders";
 import Integrations from "./pages/Integrations";
+import StockPage from "./pages/Stock";
 import { Toaster } from "sonner";
 
 function App() {
@@ -44,6 +45,7 @@ function App() {
             <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
             <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
             <Route path="/integrations" element={<ProtectedRoute roles={["super_admin", "admin"]}><Integrations /></ProtectedRoute>} />
+            <Route path="/stock" element={<ProtectedRoute><StockPage /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute roles={["super_admin", "admin"]}><Reports /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute roles={["super_admin"]}><UsersPage /></ProtectedRoute>} />
             <Route path="/branches" element={<ProtectedRoute roles={["super_admin"]}><Branches /></ProtectedRoute>} />

@@ -55,8 +55,13 @@ export default function BookingSection({ lead, constants, onReload }) {
     loan_status: "",
     exchange_final_value: "",
     notes: "",
+    payment_type: "Token",
+    inventory_id: "",
+    chassis_number: "",
   });
   const [editForm, setEditForm] = useState(null);
+  const [stockList, setStockList] = useState([]);
+  const [stockLoading, setStockLoading] = useState(false);
 
   const [payOpen, setPayOpen] = useState(false);
   const [pay, setPay] = useState({ amount: "", date: today(), mode: "Cash", payment_type: "Booking", notes: "" });
@@ -249,6 +254,49 @@ export default function BookingSection({ lead, constants, onReload }) {
           <div>
             <Label className="overline">Booking Amount *</Label>
             <Input type="number" required value={createForm.booking_amount} onChange={(e) => setCreateForm({ ...createForm, booking_amount: e.target.value })} className="mt-2" data-testid="booking-amount" />
+          </div>
+          <div className="md:col-span-2">
+            <Label className="overline">Payment Type *</Label>
+            <div className="grid grid-cols-2 gap-2 mt-2" data-testid="booking-payment-type">
+              {[
+                { v: "Token", label: "Token Amount", sub: "→ Booking Hold" },
+                { v: "Full", label: "Full Payment", sub: "→ Confirmed" },
+              ].map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setCreateForm({ ...createForm, payment_type: opt.v })}
+                  className={`border-2 rounded-sm p-3 text-left transition-colors ${
+                    createForm.payment_type === opt.v
+                      ? "border-brand bg-brand/5 text-brand-dark"
+                      : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                  }`}
+                  data-testid={`booking-pay-${opt.v.toLowerCase()}`}
+                >
+                  <div className="font-bold text-sm">{opt.label}</div>
+                  <div className="text-[10px] uppercase font-semibold mt-0.5">{opt.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="md:col-span-2">
+            <Label className="overline">Lock Vehicle from Stock (chassis)</Label>
+            <ChassisPicker
+              value={createForm.inventory_id}
+              chassis={createForm.chassis_number}
+              stockList={stockList}
+              loading={stockLoading}
+              onLoad={async () => {
+                if (stockList.length || stockLoading) return;
+                setStockLoading(true);
+                try {
+                  const { data } = await api.get("/inventory", { params: { status: "available" } });
+                  setStockList(data || []);
+                } catch (err) { /* noop */ }
+                finally { setStockLoading(false); }
+              }}
+              onPick={(it) => setCreateForm({ ...createForm, inventory_id: it ? it.id : "", chassis_number: it ? it.chassis_number : "" })}
+            />
           </div>
           <div>
             <Label className="overline">Loan Status</Label>
@@ -695,3 +743,60 @@ export default function BookingSection({ lead, constants, onReload }) {
     </>
   );
 }
+
+function ChassisPicker({ value, chassis, stockList, loading, onLoad, onPick }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  React.useEffect(() => { if (open) onLoad(); }, [open]); // eslint-disable-line
+  const filtered = q
+    ? stockList.filter((it) => `${it.brand} ${it.model} ${it.variant || ""} ${it.color || ""} ${it.chassis_number}`.toLowerCase().includes(q.toLowerCase()))
+    : stockList;
+  return (
+    <div className="mt-2" data-testid="chassis-picker">
+      {value ? (
+        <div className="flex items-center justify-between p-3 border-2 border-emerald-300 bg-emerald-50/30 rounded-sm">
+          <div>
+            <div className="text-xs uppercase font-bold text-emerald-700">Locked</div>
+            <div className="font-mono font-bold">{chassis}</div>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => onPick(null)} className="rounded-sm" data-testid="chassis-clear">
+            Change
+          </Button>
+        </div>
+      ) : (
+        <Button type="button" variant="outline" onClick={() => setOpen(!open)} className="w-full justify-start rounded-sm h-11" data-testid="chassis-pick-btn">
+          {open ? "Close picker" : "+ Pick from available stock"}
+        </Button>
+      )}
+      {open && !value && (
+        <div className="mt-2 border border-zinc-200 rounded-sm bg-white max-h-60 overflow-y-auto">
+          <div className="p-2 sticky top-0 bg-white border-b border-zinc-200">
+            <Input placeholder="Search brand/model/chassis…" value={q} onChange={(e) => setQ(e.target.value)} data-testid="chassis-search" autoFocus />
+          </div>
+          {loading && <div className="p-3 text-center text-sm text-zinc-400">Loading stock…</div>}
+          {!loading && filtered.length === 0 && (
+            <div className="p-3 text-center text-sm text-zinc-400" data-testid="chassis-empty">No available stock matches.</div>
+          )}
+          {filtered.map((it) => (
+            <button
+              key={it.id}
+              type="button"
+              onClick={() => { onPick(it); setOpen(false); }}
+              className="block w-full text-left px-3 py-2 hover:bg-zinc-50 border-b border-zinc-100"
+              data-testid={`chassis-option-${it.id}`}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="font-bold text-sm">{it.brand} · {it.model}</div>
+                  <div className="text-xs text-zinc-500">{it.variant || "—"} · {it.color || "—"}</div>
+                </div>
+                <div className="font-mono text-xs font-bold">{it.chassis_number}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+

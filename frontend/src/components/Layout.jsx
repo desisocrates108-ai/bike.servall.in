@@ -24,6 +24,7 @@ import {
   BarChart3,
   BellRing,
   Plug,
+  Boxes,
 } from "lucide-react";
 import LanguageToggle from "./LanguageToggle";
 import GlobalSearch from "./GlobalSearch";
@@ -88,6 +89,9 @@ export default function Layout({ children }) {
         </NavLink>
         <NavLink to="/reminders" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-reminders">
           <BellRing className="w-4 h-4" strokeWidth={1.75} /> {t("nav.reminders", "Reminders")}
+        </NavLink>
+        <NavLink to="/stock" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-stock">
+          <Boxes className="w-4 h-4" strokeWidth={1.75} /> Stock
         </NavLink>
         <NavLink to="/leads/new" onClick={() => setDrawerOpen(false)} className={({ isActive }) => `${sideItem} ${isActive ? sideActive : ""}`} data-testid="nav-new-lead">
           <PlusCircle className="w-4 h-4" strokeWidth={1.75} /> {t("nav.new_lead")}

@@ -49,7 +49,8 @@ export default function LeadForm() {
     alt_phone: "",
     birthdate: "",
     address: "",
-    source: "",
+    city: "",
+    source: "Walk-in",
     branch_id: user?.branch_id || "",
     priority: "Warm",
     assigned_to: user?.role === "sales_executive" ? user.id : "",
@@ -57,6 +58,8 @@ export default function LeadForm() {
     model_id: "",
     variant_id: "",
     color_id: "",
+    vehicle_type: "",     // Bike / Scooty
+    test_ride_done: false,
     purchase_type: "New Purchase",
     exchange: {
       registration_number: "", model_year: "", tyre_condition: "",
@@ -70,16 +73,15 @@ export default function LeadForm() {
     notes: "",
   });
   const [busy, setBusy] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   // Staged files for Identity + Exchange — uploaded after lead creation
   const [stagedFiles, setStagedFiles] = useState({
-    aadhaar: [],        // Identity — Aadhaar Front (mandatory for all)
-    aadhaar_back: [],   // Identity — Aadhaar Back (mandatory for all)
+    aadhaar: [],        // Identity — Aadhaar (multi: front+back)
+    pan: [],            // Identity — PAN (multi)
     other: [],          // Identity — Other docs (optional, multi)
-    rc_front: [],       // Exchange — RC Front (mandatory for Exchange)
-    rc_back: [],        // Exchange — RC Back (mandatory for Exchange)
-    rc_pdf: [],         // Exchange — RC PDF (optional, multi)
-    front_photo: [],    // Exchange — Vehicle Front (mandatory for Exchange)
-    back_photo: [],     // Exchange — Vehicle Back (mandatory for Exchange)
+    rc: [],             // Exchange — RC (multi: front+back+pdf)
+    front_photo: [],    // Exchange — Vehicle Front
+    back_photo: [],     // Exchange — Vehicle Back
   });
 
   useEffect(() => {
@@ -132,8 +134,8 @@ export default function LeadForm() {
       if (payload.payment_mode !== "Finance") payload.finance = null;
       if (!payload.assigned_to) delete payload.assigned_to;
       // Remove empty optional strings
-      ["alt_phone", "birthdate", "address", "brand_id", "model_id", "variant_id", "color_id",
-        "next_followup_date", "next_followup_type", "notes", "payment_mode"].forEach((k) => {
+      ["alt_phone", "birthdate", "address", "city", "vehicle_type", "brand_id", "model_id", "variant_id", "color_id",
+        "next_followup_date", "next_followup_type", "notes", "payment_mode", "source"].forEach((k) => {
         if (payload[k] === "") payload[k] = null;
       });
 
@@ -141,8 +143,8 @@ export default function LeadForm() {
 
       // Upload staged files (identity always; exchange only when applicable)
       const isExch = payload.purchase_type === "Exchange Vehicle";
-      const identityKeys = ["aadhaar", "aadhaar_back", "other"];
-      const exchangeKeys = ["rc_front", "rc_back", "rc_pdf", "front_photo", "back_photo"];
+      const identityKeys = ["aadhaar", "pan", "other"];
+      const exchangeKeys = ["rc", "front_photo", "back_photo"];
       const keys = isExch ? [...identityKeys, ...exchangeKeys] : identityKeys;
       const all = keys.flatMap((k) => (stagedFiles[k] || []).map((s) => ({ docType: k, file: s.file })));
       if (all.length > 0) {
@@ -193,20 +195,36 @@ export default function LeadForm() {
             <Input type="date" value={form.birthdate} onChange={(e) => set("birthdate", e.target.value)} />
           </Field>
           <Field label="Address" full>
-            <Textarea rows={2} value={form.address} onChange={(e) => set("address", e.target.value)} />
+            <Textarea rows={2} value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="House / Street / Area" data-testid="customer-address-input" />
+          </Field>
+          <Field label="City *">
+            <Input required value={form.city} onChange={(e) => set("city", e.target.value)} placeholder="e.g. Bilimora" data-testid="customer-city-input" />
           </Field>
         </Section>
 
-        <Section title="Lead Meta">
-          <Field label="Lead Source *">
+        <Section title="Lead Meta" desc={showAdvanced ? "Source, branch, priority — usually auto-set." : "Hidden by default — click below to override."}>
+          {!showAdvanced && (
+            <div className="md:col-span-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(true)}
+                className="text-sm font-bold text-brand hover:underline"
+                data-testid="show-advanced-btn"
+              >
+                Show advanced (Source / Priority / Assign) →
+              </button>
+            </div>
+          )}
+          {showAdvanced && (<>
+          <Field label="Lead Source">
             <Select value={form.source} onValueChange={(v) => set("source", v)}>
-              <SelectTrigger data-testid="source-select"><SelectValue placeholder="Select source" /></SelectTrigger>
+              <SelectTrigger data-testid="source-select"><SelectValue placeholder="Walk-in" /></SelectTrigger>
               <SelectContent>
                 {constants?.lead_sources?.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Branch (POS) *">
+          <Field label="Branch (POS)">
             {user?.role === "sales_executive" ? (
               <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-sm text-sm text-zinc-600" data-testid="branch-auto-label">
                 {branches.find((b) => b.id === user.branch_id)?.name || "Auto-assigned to your branch"}
@@ -240,9 +258,35 @@ export default function LeadForm() {
               </Select>
             </Field>
           )}
+          </>)}
         </Section>
 
-        <Section title="Vehicle" desc="Pick the brand, model, variant and color.">
+        <Section title="Vehicle Interest" desc="What is the customer looking for? All optional.">
+          <Field label="Vehicle Type">
+            <Select value={form.vehicle_type || "__NONE__"} onValueChange={(v) => set("vehicle_type", v === "__NONE__" ? "" : v)}>
+              <SelectTrigger data-testid="vehicle-type-select"><SelectValue placeholder="Bike / Scooty" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__NONE__">—</SelectItem>
+                <SelectItem value="Bike">Bike</SelectItem>
+                <SelectItem value="Scooty">Scooty</SelectItem>
+                <SelectItem value="EV">EV</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Test Ride">
+            <div className="flex gap-2 items-center h-10">
+              <button
+                type="button"
+                onClick={() => set("test_ride_done", !form.test_ride_done)}
+                className={`px-4 py-2 rounded-sm border-2 text-sm font-bold transition-colors ${
+                  form.test_ride_done ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-white text-zinc-500"
+                }`}
+                data-testid="test-ride-toggle"
+              >
+                {form.test_ride_done ? "✓ Done" : "Not yet"}
+              </button>
+            </div>
+          </Field>
           <Field label="Brand">
             <Select value={form.brand_id || "__NONE__"} onValueChange={(v) => { set("brand_id", v === "__NONE__" ? "" : v); set("model_id", ""); set("variant_id", ""); }}>
               <SelectTrigger data-testid="brand-select"><SelectValue placeholder="Select brand" /></SelectTrigger>
@@ -297,90 +341,83 @@ export default function LeadForm() {
         </Section>
 
         {form.purchase_type === "Exchange Vehicle" && (
-          <Section title="Exchange Vehicle" desc="Details of the vehicle being exchanged.">
+          <Section title="Exchange Vehicle" desc="Quick info now — full details collected at confirmation.">
             <Field label="Registration Number">
-              <Input value={form.exchange.registration_number} onChange={(e) => setNested("exchange", "registration_number", e.target.value)} />
-            </Field>
-            <Field label="Model Year">
-              <Input type="number" value={form.exchange.model_year} onChange={(e) => setNested("exchange", "model_year", e.target.value)} />
-            </Field>
-            <Field label="Tyre Condition">
-              <Input placeholder="Good / Average / Worn" value={form.exchange.tyre_condition} onChange={(e) => setNested("exchange", "tyre_condition", e.target.value)} />
-            </Field>
-            <Field label="Battery Condition">
-              <Input value={form.exchange.battery_condition} onChange={(e) => setNested("exchange", "battery_condition", e.target.value)} />
-            </Field>
-            <Field label="Body Condition">
-              <Input value={form.exchange.body_condition} onChange={(e) => setNested("exchange", "body_condition", e.target.value)} />
+              <Input value={form.exchange.registration_number} onChange={(e) => setNested("exchange", "registration_number", e.target.value)} placeholder="GJ06AB1234" data-testid="exch-regno" />
             </Field>
             <Field label="Expected Price">
-              <Input type="number" value={form.exchange.expected_price} onChange={(e) => setNested("exchange", "expected_price", e.target.value)} />
+              <Input type="number" value={form.exchange.expected_price} onChange={(e) => setNested("exchange", "expected_price", e.target.value)} placeholder="₹" data-testid="exch-expected" />
             </Field>
+            {showAdvanced && (<>
+              <Field label="Model Year">
+                <Input type="number" value={form.exchange.model_year} onChange={(e) => setNested("exchange", "model_year", e.target.value)} />
+              </Field>
+              <Field label="Tyre Condition">
+                <Input placeholder="Good / Average / Worn" value={form.exchange.tyre_condition} onChange={(e) => setNested("exchange", "tyre_condition", e.target.value)} />
+              </Field>
+              <Field label="Battery Condition">
+                <Input value={form.exchange.battery_condition} onChange={(e) => setNested("exchange", "battery_condition", e.target.value)} />
+              </Field>
+              <Field label="Body Condition">
+                <Input value={form.exchange.body_condition} onChange={(e) => setNested("exchange", "body_condition", e.target.value)} />
+              </Field>
+            </>)}
           </Section>
         )}
 
         <Section
-          title="Identity Documents & Vehicle Uploads"
+          title="Documents"
           desc={form.purchase_type === "Exchange Vehicle"
-            ? "Capture or upload: Aadhaar (front+back), RC Book (front+back), Vehicle photos (front+back). Files are saved after lead creation."
-            : "Capture or upload: Aadhaar (front+back). Additional docs optional."}
+            ? "Capture or upload Aadhaar, PAN (optional), RC Book, vehicle photos. Files saved after lead is created."
+            : "Capture or upload Aadhaar (mandatory). PAN + Other docs optional."}
         >
           <div className="md:col-span-2 space-y-5">
             <div>
-              <div className="overline mb-2">Identity Documents (KYC)</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="overline mb-2">Identity (KYC)</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <StagedSlot
-                  label="Aadhaar Front"
+                  label="Aadhaar (front + back)"
                   testid="staged-aadhaar"
                   required
+                  multi
                   files={stagedFiles.aadhaar}
-                  onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                  onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar: [] }))}
+                  onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar: [...s.aadhaar, { file: f, preview: URL.createObjectURL(f) }] }))}
+                  onRemove={(idx) => setStagedFiles((s) => ({ ...s, aadhaar: s.aadhaar.filter((_, i) => i !== idx) }))}
                 />
                 <StagedSlot
-                  label="Aadhaar Back"
-                  testid="staged-aadhaar-back"
-                  required
-                  files={stagedFiles.aadhaar_back}
-                  onAdd={(f) => setStagedFiles((s) => ({ ...s, aadhaar_back: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                  onRemove={() => setStagedFiles((s) => ({ ...s, aadhaar_back: [] }))}
+                  label="PAN Card"
+                  testid="staged-pan"
+                  multi
+                  files={stagedFiles.pan}
+                  onAdd={(f) => setStagedFiles((s) => ({ ...s, pan: [...s.pan, { file: f, preview: URL.createObjectURL(f) }] }))}
+                  onRemove={(idx) => setStagedFiles((s) => ({ ...s, pan: s.pan.filter((_, i) => i !== idx) }))}
+                />
+                <StagedSlot
+                  label="Other Documents"
+                  testid="staged-other"
+                  multi
+                  files={stagedFiles.other}
+                  onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
+                  onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
                 />
               </div>
             </div>
 
             {form.purchase_type === "Exchange Vehicle" && (
-              <>
-                <div data-testid="staged-rc-section">
-                  <div className="overline mb-2">Vehicle Documents (RC Book)</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <StagedSlot
-                      label="RC Front"
-                      testid="staged-rc-front"
-                      required
-                      files={stagedFiles.rc_front}
-                      onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_front: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                      onRemove={() => setStagedFiles((s) => ({ ...s, rc_front: [] }))}
-                    />
-                    <StagedSlot
-                      label="RC Back"
-                      testid="staged-rc-back"
-                      required
-                      files={stagedFiles.rc_back}
-                      onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_back: [{ file: f, preview: URL.createObjectURL(f) }] }))}
-                      onRemove={() => setStagedFiles((s) => ({ ...s, rc_back: [] }))}
-                    />
-                    <StagedSlot
-                      label="RC PDF"
-                      testid="staged-rc-pdf"
-                      multi
-                      files={stagedFiles.rc_pdf}
-                      onAdd={(f) => setStagedFiles((s) => ({ ...s, rc_pdf: [...s.rc_pdf, { file: f, preview: URL.createObjectURL(f) }] }))}
-                      onRemove={(idx) => setStagedFiles((s) => ({ ...s, rc_pdf: s.rc_pdf.filter((_, i) => i !== idx) }))}
-                    />
-                  </div>
+              <div data-testid="staged-exchange-section" className="space-y-4">
+                <div>
+                  <div className="overline mb-2">Vehicle Documents</div>
+                  <StagedSlot
+                    label="RC Book (front + back)"
+                    testid="staged-rc"
+                    required
+                    multi
+                    files={stagedFiles.rc}
+                    onAdd={(f) => setStagedFiles((s) => ({ ...s, rc: [...s.rc, { file: f, preview: URL.createObjectURL(f) }] }))}
+                    onRemove={(idx) => setStagedFiles((s) => ({ ...s, rc: s.rc.filter((_, i) => i !== idx) }))}
+                  />
                 </div>
-
-                <div data-testid="staged-vehicle-photos-section">
+                <div>
                   <div className="overline mb-2">Vehicle Photos</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <StagedSlot
@@ -403,49 +440,36 @@ export default function LeadForm() {
                     />
                   </div>
                 </div>
-              </>
+              </div>
             )}
-
-            <div>
-              <div className="overline mb-2">Other Documents (optional)</div>
-              <StagedSlot
-                label="Other Documents"
-                testid="staged-other"
-                multi
-                files={stagedFiles.other}
-                onAdd={(f) => setStagedFiles((s) => ({ ...s, other: [...s.other, { file: f, preview: URL.createObjectURL(f) }] }))}
-                onRemove={(idx) => setStagedFiles((s) => ({ ...s, other: s.other.filter((_, i) => i !== idx) }))}
-              />
-            </div>
 
             {(() => {
               const isExch = form.purchase_type === "Exchange Vehicle";
-              const target = isExch ? 6 : 2;
+              const target = isExch ? 4 : 1;
               const done =
                 (stagedFiles.aadhaar.length ? 1 : 0) +
-                (stagedFiles.aadhaar_back.length ? 1 : 0) +
-                (isExch ? (stagedFiles.rc_front.length ? 1 : 0) : 0) +
-                (isExch ? (stagedFiles.rc_back.length ? 1 : 0) : 0) +
+                (isExch ? (stagedFiles.rc.length ? 1 : 0) : 0) +
                 (isExch ? (stagedFiles.front_photo.length ? 1 : 0) : 0) +
                 (isExch ? (stagedFiles.back_photo.length ? 1 : 0) : 0);
               const other = stagedFiles.other.length;
-              const pdf = stagedFiles.rc_pdf.length;
+              const pan = stagedFiles.pan.length;
               const extras = [];
+              if (pan) extras.push(`+${pan} PAN`);
               if (other) extras.push(`+${other} other`);
-              if (isExch && pdf) extras.push(`+${pdf} RC PDF`);
               const extraStr = extras.length ? ` · ${extras.join(" · ")}` : "";
               return (
                 <div className={`text-xs font-bold ${done === target ? "text-emerald-700" : "text-amber-700"}`} data-testid="staged-progress">
                   {done === target
-                    ? `✅ All ${target} mandatory files staged${extraStr}`
-                    : `⚠️ ${done}/${target} mandatory files staged — will upload after lead is saved${extraStr}`}
+                    ? `✅ All ${target} mandatory file(s) staged${extraStr}`
+                    : `⚠️ ${done}/${target} mandatory file(s) — upload after lead is saved${extraStr}`}
                 </div>
               );
             })()}
           </div>
         </Section>
 
-        <Section title="Deal">
+        {showAdvanced && (
+        <Section title="Deal (optional)" desc="Pricing details — leave blank if not yet finalized.">
           <Field label="Customer Expected Price">
             <Input type="number" value={form.deal.customer_expected_price} onChange={(e) => setNested("deal", "customer_expected_price", e.target.value)} />
           </Field>
@@ -464,8 +488,10 @@ export default function LeadForm() {
             </Select>
           </Field>
         </Section>
+        )}
 
-        <Section title="Payment & Finance">
+        {showAdvanced && (
+        <Section title="Payment & Finance (optional)">
           <Field label="Payment Mode">
             <Select value={form.payment_mode || "__NONE__"} onValueChange={(v) => set("payment_mode", v === "__NONE__" ? "" : v)}>
               <SelectTrigger data-testid="payment-mode-select"><SelectValue placeholder="Select mode" /></SelectTrigger>
@@ -492,6 +518,7 @@ export default function LeadForm() {
             </>
           )}
         </Section>
+        )}
 
         <Section title="Follow-up">
           <Field label="Next Follow-up Date">
