@@ -1,5 +1,49 @@
 # CHANGELOG — Servall CRM
 
+## 2026-04-28 — Iteration 18: Full Simplification (Phases 1+2+3)
+**Scope**: Massive UX restructure — turn complex CRM into a fast dealership sales tool. 19/19 backend + frontend smoke tests **100% PASS**.
+
+### Phase 1 — UX Simplification
+**Funnel** — reduced from 11 → 9 stages: `Inquiry, Follow-up, Test Ride, Booking, Booking Hold (NEW), Allotment, RTO, Delivered, Lost`. Old names mapped via `STAGE_ALIAS` (Interest→Follow-up, Deal→Booking, Delivery→Delivered, Registration→RTO, Feedback→Delivered) + `POST /api/admin/migrate-stages` for one-time DB migration. All hardcoded stage checks rewritten via bulk-safe Python script.
+
+**Lead Form** — only Customer Name + Phone are mandatory. Address + City visible by default. Vehicle Interest section (Vehicle Type Bike/Scooty/EV + Test Ride toggle + optional Brand/Model). All other Meta + Deal + Payment fields are hidden behind a `Show advanced` toggle. Source defaults to `Walk-in`; branch auto-resolves (sales → own, super → first active).
+
+**Documents** — slots merged for simpler UX:
+- Identity: `aadhaar` (multi front+back), `pan` (NEW multi), `other` (multi)
+- Exchange: `rc` (multi front+back+pdf), `front_photo`, `back_photo`
+- Old buckets (`aadhaar_back`, `rc_front`, `rc_back`, `rc_pdf`, `rc_book`) still accepted on POST for backward compat. Stage-gate updated: Aadhaar (only) for KYC; for Exchange RC + Vehicle photos.
+
+### Phase 2 — Stock & Chassis System
+**New `inventory` collection** — chassis-level vehicle stock.
+
+**New endpoints**:
+- `GET /api/inventory?status=&brand=&model=&chassis=` — list with filters
+- `POST /api/inventory` — single add (admin/super only); duplicate chassis → 400
+- `DELETE /api/inventory/{id}` — only if `status=available`
+- `POST /api/inventory/upload` — CSV/XLSX bulk upload (mandatory cols: brand, model, chassis_number; optional: variant, color, engine_number, notes). Returns `{added, skipped_duplicates, errors}`. Uses `openpyxl` for XLSX.
+
+**Booking flow** — `BookingCreate` accepts `payment_type` (Token|Full), `inventory_id`, `chassis_number`. On submit:
+- Validates inventory item is `available` (else 400)
+- Locks inventory → `status="booked"`, stores `booked_lead_id` + `booked_booking_id`
+- Free-text `chassis_number` also checked for duplicate across non-cancelled bookings
+- Token payment → lead.stage auto-advances to `Booking Hold`; Full → `Booking`
+
+**New Stock page** (`/stock`, all logged-in users; admin can edit) — KPIs (Available/Booked/Total), CSV/Excel uploader, single-add form, filters, delete. Sidebar nav `Boxes` icon.
+
+**Chassis Picker** (BookingSection) — searchable dropdown of available inventory; locks chassis on selection; "Change" button to clear.
+
+### Phase 3 — Polish
+- Branch (POS) field auto-hidden for sales_executive; admin disabled-locked (existing).
+- Existing Tasks + Reminders pages already simple — kept.
+- Finance section gated behind `Show advanced` (Aadhaar+PAN already covered via Identity slots — Bank Passbook bucket added to backend `IDENTITY_DOC_TYPES`).
+
+### Production state
+- Test residue purged. **1 user (super_admin), 0 leads, 0 inventory, 0 files.**
+- `production_mode` flag preserved across restarts — sample users/leads will not re-seed.
+
+### Test report
+`/app/test_reports/iteration_18.json` — **100% PASS** (19/19 backend pytest + frontend Playwright smoke).
+
 ## 2026-04-22 — Iteration 17: Production Prep — DocumentsGallery + Demo Data Purge
 **Scope**: Go-live preparation. Single consolidated document view on Lead Detail + full data wipe.
 
