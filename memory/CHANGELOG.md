@@ -243,3 +243,11 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
 ### Test reports
 - `/app/test_reports/iteration_19.json` (100% backend + frontend)
 - `/app/test_reports/iteration_20.json` (100% backend + frontend)
+
+## 2026-04-28 — Iteration 21: Delete user button + Funnel stages fix
+### Bug fixes from production screenshots
+- **Funnel.jsx** had hardcoded 11 legacy stages (Inquiry, Follow-up, Interest, Test Ride, Deal, Booking, Allotment, Delivery, Registration, Feedback, Lost). Backend was already on the new 8-stage flow. Fixed: Funnel now reads stages from `/api/constants` with FALLBACK_STAGES = ["Inquiry", "Follow-up", "Hold", "Booking", "Delivery", "Allotment", "Feedback", "Lost"].
+- **Users.jsx** had no Delete button. Added Trash2 delete button (super_admin only, hidden for own row) with browser `window.confirm` → `DELETE /api/users/{id}`. Backend endpoint already enforced super_admin + self-delete 400.
+
+### Test report
+`/app/test_reports/iteration_21.json` — backend pytest 5/5 + frontend Playwright 100% PASS.
