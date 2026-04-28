@@ -79,6 +79,7 @@ export default function LeadDetail() {
     call_duration: "",
     done: true,
   });
+  const [fuAdvanced, setFuAdvanced] = useState(false);
 
   const [dealForm, setDealForm] = useState({
     customer_expected_price: "",
@@ -530,7 +531,19 @@ export default function LeadDetail() {
         </TabsContent>
 
         <TabsContent value="followups" className="pt-6">
-          <Card title="Log a follow-up" right={<span className="text-xs text-zinc-500">Notes are mandatory</span>}>
+          <Card title="Log a follow-up" right={
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-zinc-500">Notes are mandatory</span>
+              <button
+                type="button"
+                onClick={() => setFuAdvanced((v) => !v)}
+                className="text-xs font-semibold text-brand hover:text-brand-dark"
+                data-testid="fu-toggle-advanced"
+              >
+                {fuAdvanced ? "Hide advanced" : "Show advanced"}
+              </button>
+            </div>
+          }>
             <form onSubmit={submitFu} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
                 <Label className="overline">Type</Label>
@@ -541,6 +554,19 @@ export default function LeadDetail() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label className="overline">Next Follow-up Date *</Label>
+                <Input type="date" required value={newFu.scheduled_date} onChange={(e) => setNewFu((s) => ({ ...s, scheduled_date: e.target.value }))} className="mt-2" data-testid="fu-date" />
+              </div>
+              <div>
+                <Label className="overline">Next Follow-up Time</Label>
+                <Input type="time" value={newFu.scheduled_time} onChange={(e) => setNewFu((s) => ({ ...s, scheduled_time: e.target.value }))} className="mt-2" data-testid="fu-time" />
+              </div>
+              <div className="md:col-span-2 lg:col-span-3">
+                <Label className="overline">Notes *</Label>
+                <Textarea required rows={2} value={newFu.notes} onChange={(e) => setNewFu((s) => ({ ...s, notes: e.target.value }))} className="mt-2" data-testid="fu-notes" />
+              </div>
+              {fuAdvanced && (<>
               <div>
                 <Label className="overline">Call Status</Label>
                 <Select value={newFu.call_status || "__NONE__"} onValueChange={(v) => setNewFu((s) => ({ ...s, call_status: v === "__NONE__" ? "" : v }))}>
@@ -585,19 +611,8 @@ export default function LeadDetail() {
                 <Label className="overline">Call Duration (sec)</Label>
                 <Input type="number" value={newFu.call_duration} onChange={(e) => setNewFu((s) => ({ ...s, call_duration: e.target.value }))} className="mt-2" data-testid="fu-duration" />
               </div>
-              <div>
-                <Label className="overline">Next Follow-up Date *</Label>
-                <Input type="date" required value={newFu.scheduled_date} onChange={(e) => setNewFu((s) => ({ ...s, scheduled_date: e.target.value }))} className="mt-2" data-testid="fu-date" />
-              </div>
-              <div>
-                <Label className="overline">Next Follow-up Time</Label>
-                <Input type="time" value={newFu.scheduled_time} onChange={(e) => setNewFu((s) => ({ ...s, scheduled_time: e.target.value }))} className="mt-2" data-testid="fu-time" />
-              </div>
-              <div className="md:col-span-2 lg:col-span-3">
-                <Label className="overline">Notes *</Label>
-                <Textarea required rows={2} value={newFu.notes} onChange={(e) => setNewFu((s) => ({ ...s, notes: e.target.value }))} className="mt-2" data-testid="fu-notes" />
-              </div>
-              {newFu.outcome_tag === "Lost" && (
+              </>)}
+              {fuAdvanced && newFu.outcome_tag === "Lost" && (
                 <div className="md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <Label className="overline">Loss Reason</Label>

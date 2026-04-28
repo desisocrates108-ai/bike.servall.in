@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 20 Phase-3 testing complete — backend pytest 11/11 PASS (constants doc simplification, PUT customer_type validation, regression on Iter19 POST customer_type). Frontend Playwright 100% PASS — Follow-up form shows only minimal 4 fields by default, advanced fields are NOT in DOM when collapsed, toggle expands/collapses correctly, minimal submit (Notes + Date) successfully creates follow-up and updates lead.next_followup_date.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter20_phase3.py",
+    "/app/test_reports/pytest/iter20_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py update_lead at line 1392 uses `if v is not None` filter; empty-string customer_type still flows through correctly and is normalized to None on line 1401 — verified by test_put_empty_customer_type_stored_as_null.",
+    "LeadDetail.jsx fuAdvanced gate cleanly wraps secondary fields incl. the Lost-reason sub-block (line 615), so Loss Reason cannot be set without revealing advanced — correct UX.",
+    "Console showed a 405 on DELETE /api/leads/{id} from test cleanup attempt — expected because backend has no DELETE endpoint for leads. Not a product bug; test cleanup uses direct mongo.delete_many."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter20_phase3.py"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100%"},
+  "test_credentials": "superadmin@dealer.com / super123 (only active account post-purge)",
+  "seed_data_creation": "Test created 6 TEST_Iter20 leads + 1 follow-up during pytest and 1 lead via Playwright; all cleaned up via direct mongo delete_many on regex ^TEST_Iter20 (verified 1 lead + 1 followup deleted post-FE test, pytest cleanup task ran inline).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 20 Phase 3 fully validated. /api/constants now exposes Bank Passbook (Bank Statement removed) and Finance docs simplified to Aadhaar+PAN+Bank Passbook. PUT /api/leads/{id} validates customer_type whitelist identical to POST. Frontend follow-up form has 'fu-toggle-advanced' (Show/Hide advanced) controlling visibility of fu-call-status, fu-customer-response, fu-outcome, fu-temperature, fu-duration via fuAdvanced state in LeadDetail.jsx. Iter19 customer_type regression preserved. Regression test reused pattern from /app/backend/tests/test_iter19_customer_type.py.",
+  "rca of the issue": "N/A — no issues discovered."
+}

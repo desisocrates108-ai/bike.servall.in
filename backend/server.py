@@ -81,7 +81,7 @@ DEAL_STATUSES = ["Draft", "Negotiation", "Approval Pending",
 BOOKING_STATUSES = ["Pending", "Confirmed", "Cancelled"]
 ALLOTMENT_STATUSES = ["Pending", "Allotted"]
 LOAN_STATUSES = ["Pending", "Approved", "Rejected"]
-DOC_TYPES = ["Aadhaar Card", "PAN Card", "RC Book", "Bank Statement",
+DOC_TYPES = ["Aadhaar Card", "PAN Card", "RC Book", "Bank Passbook",
              "Finance Document", "Insurance Copy", "Invoice",
              "RTO Form 20", "RTO Form 21", "RTO Form 22",
              "Sale Challan", "Address Proof", "Photo", "Other"]
@@ -111,7 +111,7 @@ CAMPAIGN_TYPES = ["Festival", "Offer", "Service Reminder", "Exchange Offer", "Cu
 CAMPAIGN_STATUSES = ["Draft", "Scheduled", "Running", "Completed", "Cancelled"]  # show "margin due before X days of delivery"
 DOC_REQUIREMENTS = {
     "Booking": ["Aadhaar Card"],
-    "Finance": ["Aadhaar Card", "PAN Card", "Bank Statement"],
+    "Finance": ["Aadhaar Card", "PAN Card", "Bank Passbook"],
     "RTO": ["Aadhaar Card", "PAN Card", "RTO Form 20", "RTO Form 21"],
     "Delivered": ["Aadhaar Card", "Invoice"],
 }
@@ -1392,6 +1392,13 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if "assigned_to" in updates and user["role"] == "sales_executive":
         del updates["assigned_to"]
+
+    # Validate customer_type whitelist on update too
+    if "customer_type" in updates:
+        ct = (updates["customer_type"] or "").strip()
+        if ct and ct not in CUSTOMER_TYPES:
+            raise HTTPException(400, f"Invalid customer_type. Use one of: {CUSTOMER_TYPES}")
+        updates["customer_type"] = ct or None
 
     # Conditional cleanup — if switching Exchange → New Purchase, wipe exchange docs/photos
     # (Keep identity_docs intact since Aadhaar is common to both.)
