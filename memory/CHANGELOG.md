@@ -261,3 +261,19 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
 
 ### Test report
 `/app/test_reports/iteration_22.json` — backend 5/5 + frontend 100% PASS.
+
+## 2026-04-28 — Iteration 23: PWA "Install App" support
+- **New component** `InstallAppButton.jsx`:
+  - Listens to `beforeinstallprompt` (Android Chrome/Edge) → one-tap native install
+  - On iOS Safari (UA detected) → opens shadcn Dialog with 3-step "Add to Home Screen" instructions in Hinglish
+  - Auto-hides when `display-mode: standalone` (already installed)
+  - Two variants: `compact` (used in topbars) and full-width
+- **Mounted in `Layout.jsx`** — both mobile top bar AND desktop top bar near `LanguageToggle`.
+- PWA assets (`manifest.json`, `service-worker.js`, 192/512 icons) were already configured. SW registration remains production-only (`NODE_ENV==='production'`).
+
+### How users install
+- **Android Chrome/Edge**: After production deploy, "Install App" button appears in topbar → one tap → native install dialog → app icon on home screen.
+- **iPhone/iPad Safari**: "Install App" button opens custom dialog with the standard Share → Add to Home Screen flow.
+
+### Test report
+`/app/test_reports/iteration_23.json` — frontend 100% PASS (default chromium hides button correctly; iOS Safari UA simulation shows button + dialog with 3 steps + close button; regression smoke on /funnel, /users, /leads all green).
