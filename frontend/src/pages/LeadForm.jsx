@@ -61,6 +61,7 @@ export default function LeadForm() {
     vehicle_type: "",     // Bike / Scooty
     test_ride_done: false,
     purchase_type: "New Purchase",
+    customer_type: "",
     exchange: {
       registration_number: "", model_year: "", tyre_condition: "",
       battery_condition: "", body_condition: "", expected_price: "",
@@ -141,11 +142,12 @@ export default function LeadForm() {
 
       const { data } = await api.post("/leads", payload);
 
-      // Upload staged files (identity always; exchange only when applicable)
+      // Upload staged files (only when customer_type wants documents)
+      const wantsDocs = payload.customer_type === "Instant Buyer" || payload.customer_type === "Token Finance Buyer";
       const isExch = payload.purchase_type === "Exchange Vehicle";
       const identityKeys = ["aadhaar", "pan", "other"];
       const exchangeKeys = ["rc", "front_photo", "back_photo"];
-      const keys = isExch ? [...identityKeys, ...exchangeKeys] : identityKeys;
+      const keys = wantsDocs ? (isExch ? [...identityKeys, ...exchangeKeys] : identityKeys) : [];
       const all = keys.flatMap((k) => (stagedFiles[k] || []).map((s) => ({ docType: k, file: s.file })));
       if (all.length > 0) {
         toast.loading(`Uploading ${all.length} file(s)…`, { id: "exch-up" });
@@ -181,6 +183,31 @@ export default function LeadForm() {
       <div className="p-3 sm:p-6 max-w-[1200px] mx-auto w-full">
 
       <form onSubmit={submit}>
+        <Section title="Customer Type" desc="Pick the buying intent — drives which fields are needed.">
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="customer-type-grid">
+            {[
+              { v: "Instant Buyer", title: "Instant Buyer", sub: "Pays full now → Booking" },
+              { v: "Token Finance Buyer", title: "Token / Finance", sub: "Token or finance → Hold" },
+              { v: "Just Inquiry", title: "Just Inquiry", sub: "Looking only → Follow-up" },
+            ].map((opt) => (
+              <button
+                key={opt.v}
+                type="button"
+                onClick={() => set("customer_type", opt.v)}
+                className={`border-2 rounded-sm p-3 text-left transition-colors ${
+                  form.customer_type === opt.v
+                    ? "border-brand bg-brand/5 text-brand-dark"
+                    : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                }`}
+                data-testid={`customer-type-${opt.v.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <div className="font-bold text-sm">{opt.title}</div>
+                <div className="text-[10px] uppercase font-semibold mt-0.5 text-zinc-500">{opt.sub}</div>
+              </button>
+            ))}
+          </div>
+        </Section>
+
         <Section title="Customer" desc="Basic details about the customer.">
           <Field label="Customer Name *">
             <Input required value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} data-testid="customer-name-input" />
@@ -365,6 +392,7 @@ export default function LeadForm() {
           </Section>
         )}
 
+        {(form.customer_type === "Instant Buyer" || form.customer_type === "Token Finance Buyer") && (
         <Section
           title="Documents"
           desc={form.purchase_type === "Exchange Vehicle"
@@ -467,6 +495,7 @@ export default function LeadForm() {
             })()}
           </div>
         </Section>
+        )}
 
         {showAdvanced && (
         <Section title="Deal (optional)" desc="Pricing details — leave blank if not yet finalized.">

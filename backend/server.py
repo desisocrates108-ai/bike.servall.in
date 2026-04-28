@@ -51,16 +51,20 @@ logger = logging.getLogger("crm")
 LEAD_SOURCES = ["Walk-in", "Tele-in", "Digital Marketing", "Social Media",
                 "WhatsApp", "Email", "Referral", "Offline", "Cold Calling"]
 PRIORITIES = ["Hot", "Warm", "Cold"]
-STAGES = ["Inquiry", "Follow-up", "Test Ride", "Booking", "Booking Hold",
-          "Allotment", "RTO", "Delivered", "Lost"]
+STAGES = ["Inquiry", "Follow-up", "Hold", "Booking", "Delivery",
+          "Allotment", "Feedback", "Lost"]
 # Backward-compat mapping for legacy stage names (used during migration + read shim)
 STAGE_ALIAS = {
     "Interest": "Follow-up",
     "Deal": "Booking",
-    "Delivery": "Delivered",
-    "Registration": "RTO",
-    "Feedback": "Delivered",
+    "Test Ride": "Follow-up",
+    "Booking Hold": "Hold",
+    "RTO": "Allotment",
+    "Delivered": "Delivery",
+    "Registration": "Allotment",
 }
+
+CUSTOMER_TYPES = ["Instant Buyer", "Token Finance Buyer", "Just Inquiry"]
 PAYMENT_MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Finance"]
 FOLLOWUP_TYPES = ["Call", "WhatsApp", "Visit", "Test Ride", "Other"]
 CALL_STATUSES = ["Connected", "Not Connected"]
@@ -343,6 +347,7 @@ class LeadCreate(BaseModel):
     vehicle_type: Optional[str] = None  # Bike / Scooty
     test_ride_done: Optional[bool] = None
     purchase_type: Optional[str] = "New Purchase"  # or "Exchange Vehicle"
+    customer_type: Optional[str] = None  # "Instant Buyer" | "Token Finance Buyer" | "Just Inquiry"
     exchange: Optional[ExchangeInfo] = None
     deal: Optional[DealInfo] = None
     payment_mode: Optional[str] = None
@@ -370,6 +375,7 @@ class LeadUpdate(BaseModel):
     vehicle_type: Optional[str] = None
     test_ride_done: Optional[bool] = None
     purchase_type: Optional[str] = None
+    customer_type: Optional[str] = None
     exchange: Optional[ExchangeInfo] = None
     deal: Optional[DealInfo] = None
     payment_mode: Optional[str] = None
@@ -1330,10 +1336,19 @@ async def create_lead(body: LeadCreate, user: dict = Depends(get_current_user)):
 
     lead_id = str(uuid.uuid4())
     doc = body.model_dump()
+    # Validate customer_type
+    ct = (body.customer_type or "").strip()
+    if ct and ct not in CUSTOMER_TYPES:
+        raise HTTPException(400, f"Invalid customer_type. Use one of: {CUSTOMER_TYPES}")
+    # Default initial stage based on customer type
+    initial_stage = "Inquiry"
+    if ct == "Just Inquiry":
+        initial_stage = "Follow-up"
     doc.update({
         "id": lead_id,
         "assigned_to": assigned_to,
-        "stage": "Inquiry",
+        "stage": initial_stage,
+        "customer_type": ct or None,
         "created_by": user["id"],
         "created_at": now_iso(),
         "updated_at": now_iso(),
@@ -1491,15 +1506,16 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
         raise HTTPException(400, "Invalid stage")
 
     # --- STRICT FORM-BASED FUNNEL VALIDATION ---
-    # Identity / Ownership document gating — required for ANY forward stage past Inquiry
-    # (Allows Inquiry ↔ Inquiry and any → Lost without docs)
-    if body.stage not in ("Inquiry", "Lost"):
+    # Identity / Ownership document gating — required only when moving to Booking and beyond
+    # (Inquiry / Follow-up / Hold / Lost don't require docs)
+    DOC_GATED_STAGES = {"Booking", "Delivery", "Allotment", "Feedback"}
+    if body.stage in DOC_GATED_STAGES:
         identity = lead.get("identity_docs") or {}
         missing_id = []
         if not (identity.get("aadhaar") or []):
             missing_id.append("Aadhaar")
         if missing_id:
-            raise HTTPException(400, f"Upload required KYC documents before advancing: {', '.join(missing_id)}")
+            raise HTTPException(400, f"Upload required KYC documents before moving to {body.stage}: {', '.join(missing_id)}")
         if (lead.get("purchase_type") or "") == "Exchange Vehicle":
             exch_docs = (lead.get("exchange") or {}).get("documents") or {}
             missing_ex = []
@@ -1511,7 +1527,7 @@ async def change_stage(lid: str, body: StageChange, user: dict = Depends(get_cur
             if not (exch_docs.get("back_photo") or []):
                 missing_ex.append("Vehicle Back Photo")
             if missing_ex:
-                raise HTTPException(400, f"Exchange Vehicle requires: {', '.join(missing_ex)} before advancing")
+                raise HTTPException(400, f"Exchange Vehicle requires: {', '.join(missing_ex)} before moving to {body.stage}")
 
     # Inquiry → Follow-up: Name + Phone + Vehicle (brand OR model) required
     deal = lead.get("deal") or {}
@@ -2262,8 +2278,8 @@ async def create_booking(lid: str, body: BookingIn, user: dict = Depends(get_cur
             }},
         )
 
-    # Auto-advance lead stage — Token → Booking Hold; Full → Booking
-    target_stage = "Booking Hold" if pay_type == "Token" else "Booking"
+    # Auto-advance lead stage — Token → Hold; Full → Booking
+    target_stage = "Hold" if pay_type == "Token" else "Booking"
     stage_order = {s: i for i, s in enumerate(STAGES)}
     if stage_order.get(lead.get("stage"), 0) < stage_order[target_stage]:
         await db.leads.update_one({"id": lid},
@@ -4792,6 +4808,7 @@ async def get_constants():
         "customer_responses": CUSTOMER_RESPONSES,
         "outcome_tags": OUTCOME_TAGS,
         "lost_reasons": LOST_REASONS,
+        "customer_types": CUSTOMER_TYPES,
         "deal_loss_reasons": DEAL_LOSS_REASONS,
         "deal_statuses": DEAL_STATUSES,
         "booking_statuses": BOOKING_STATUSES,
