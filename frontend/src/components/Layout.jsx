@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import LanguageToggle from "./LanguageToggle";
 import GlobalSearch from "./GlobalSearch";
+import InstallAppButton from "./InstallAppButton";
 import { roleLabel } from "../lib/labels";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 
@@ -198,6 +199,7 @@ export default function Layout({ children }) {
             </div>
           </Link>
           <GlobalSearch />
+          <InstallAppButton variant="compact" />
           <LanguageToggle />
         </div>
 
@@ -206,6 +208,7 @@ export default function Layout({ children }) {
           <div className="flex-1 max-w-md">
             <GlobalSearch />
           </div>
+          <InstallAppButton variant="compact" />
           <LanguageToggle />
         </div>
 

@@ -1,0 +1,41 @@
+{
+  "summary": "Frontend-only PWA Install App Button testing for Servall CRM. Verified that InstallAppButton silently renders nothing in default chromium (preview env, no beforeinstallprompt), and renders correctly under iOS Safari user-agent simulation with working dialog flow. Regression smoke for /funnel, /users, /leads also passing. No backend tests run (per request).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "InstallAppButton.jsx: `isStandalone` is computed at render time (not in state) — this is fine because it's stable across renders, but adding it to useEffect deps array is harmless. No issue.",
+    "Two install-app-btn elements with the same data-testid are rendered (mobile topbar + desktop topbar). Only one is visible at any given viewport due to `hidden md:flex` parent classes, so it works in practice. However, for stricter testability, consider giving them distinct testids (e.g., install-app-btn-mobile / install-app-btn-desktop) or de-duplicating via a single mount point with responsive styling. Minor maintainability nit only.",
+    "iOS detection via UA regex is the standard approach but will miss edge cases (e.g., iPadOS 13+ reports as Mac). Acceptable for this MVP feature.",
+    "Service worker registration is gated by NODE_ENV==='production' — so install button via beforeinstallprompt path is impossible to verify in preview/dev mode. iOS UA-help path is the only testable path here, and it works correctly."
+  ],
+  "test_results": {
+    "default_chromium_desktop_login": "PASS — logged in to /dashboard, no console errors related to InstallAppButton",
+    "install_btn_hidden_in_default_chromium": "PASS — [data-testid='install-app-btn'] returns null (canShow=false because no beforeinstallprompt fired and !isIOS)",
+    "ios_safari_ua_simulation_login": "PASS — fresh Playwright context with iPhone 17 UA + 390x844 viewport logged in successfully",
+    "install_btn_visible_on_ios_ua": "PASS — install-app-btn rendered, visible=True, bbox present in mobile topbar",
+    "ios_help_dialog_opens_on_click": "PASS — clicking the visible install-app-btn opens [data-testid='ios-install-help'] (Radix Dialog portal), visible=True",
+    "ios_help_dialog_has_3_steps": "PASS — 3 numbered step badges (span.bg-brand) found inside dialog",
+    "ios_help_dialog_close_btn_present": "PASS — [data-testid='ios-install-help-close'] present in dialog",
+    "regression_funnel_page": "PASS — /funnel renders Sales Funnel kanban with INQUIRY (6 leads), FOLLOW-UP (2 leads), HOLD, BOOKING, DELIVERY, ALLOTTED columns visible (8 stages, horizontally scrollable)",
+    "regression_users_delete_btn": "PASS — /users page renders with 4 delete buttons for non-self super_admin rows",
+    "regression_leads_list": "PASS — /leads page shows 8 leads with correct stage badges (INQUIRY/FOLLOW-UP) and priority chips",
+    "console_errors_on_default_chromium": "0 InstallAppButton-related errors. Background 401 errors observed on iOS context (likely a pre-auth resource fetch); unrelated to install button feature."
+  },
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100%"},
+  "test_credentials": "superadmin@dealer.com / super123 (from /app/memory/test_credentials.md, post-purge production)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PWA InstallAppButton iter-23 verified end-to-end. Default chromium (preview/dev mode) correctly hides the button (canShow=false). iOS Safari UA simulation via new browser context with user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0...) Safari/604.1' + viewport 390x844 + is_mobile=True correctly shows the button and opens the help dialog with 3 steps + close button. NOTE: Two install-app-btn elements exist in the DOM (mobile + desktop topbar), only one visible per viewport — when writing future Playwright tests, always loop and pick the visible one (or use is_mobile context). beforeinstallprompt path is NOT testable in preview env because SW registration is gated by NODE_ENV==='production'. Backend untouched in this iter.",
+  "rca_of_the_issue": "No bugs surfaced. One initial flaky test where dialog appeared not to open after click (force=True) — re-running with normal click after scroll_into_view reliably opened the dialog with all expected content. The flake is most likely a timing/portal-mount race in Playwright's force=True dispatch path, not a product bug."
+}
