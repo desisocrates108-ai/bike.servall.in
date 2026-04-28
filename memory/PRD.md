@@ -51,19 +51,16 @@ Build a comprehensive Two-Wheeler Dealership Sales CRM ("Servall CRM") that feel
     └── index.html  (manifest link, theme-color #ED1C24)
 ```
 
-## Core Funnel — Strict Form-Gated
-Inquiry → Follow-up → Interest → Test Ride → Deal → Booking → **Allotment** → Delivery → Registration → Feedback → Lost
+## Core Funnel — Simplified (Iter 18+)
+Inquiry → Follow-up → Hold → Booking → Delivery → Allotment → Feedback → Lost
 
-| From → To | Required (enforced in `POST /api/leads/{lid}/stage`) |
-|---|---|
-| → Follow-up | Customer name + phone + vehicle (brand or model) |
-| → Interest  | ≥ 1 Connected follow-up marked `Interested` |
-| → Deal      | brand + model + customer budget + ≥ 1 Connected follow-up |
-| → Booking   | payment_mode + final_deal_price + (manager approval if discount ≥ threshold) |
-| → Allotment | Booking exists with booking_amount > 0 |
-| → Delivery  | chassis_number present on allotment |
-| → Registration | Full payment completed + verified Registration docs |
-| → Lost      | lost_reason mandatory |
+**Customer Type routing on Lead create (Iter 19):**
+- "Instant Buyer" → starts at Inquiry, identity docs (Aadhaar+PAN+Other) collected
+- "Token Finance Buyer" → starts at Inquiry, identity docs collected
+- "Just Inquiry" → starts directly at Follow-up, no docs required
+
+**Finance docs simplified (Iter 20):** Aadhaar Card + PAN Card + Bank Passbook (was: Bank Statement)
+**Follow-up form simplified (Iter 20):** default 4 fields (Type, Notes*, Next Date*, Next Time); 6 secondary fields behind "Show advanced" toggle.
 
 ## What's Implemented
 (See CHANGELOG below.)

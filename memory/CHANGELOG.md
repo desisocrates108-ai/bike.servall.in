@@ -224,3 +224,22 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
 ## 2026-04-20 — Modules 13-14
 ## 2026-04-19 — Modules 11-12
 ## Earlier — Modules 1-10
+
+## 2026-04-28 — Iteration 19 + 20: Customer Type + Phase 3 simplification
+### Iter 19 — Customer Type
+- Backend `CUSTOMER_TYPES = ["Instant Buyer", "Token Finance Buyer", "Just Inquiry"]`
+- POST `/api/leads` validates whitelist; `Just Inquiry` bypasses Inquiry stage and starts at `Follow-up`.
+- `/api/constants` exposes `customer_types` array.
+- Frontend `LeadForm.jsx`: 3-button selector (`customer-type-grid` + `customer-type-{value}`); Documents section gated by `wantsDocs` (visible only for Instant / Token Finance Buyer).
+- Test: `/app/backend/tests/test_iter19_customer_type.py` — 8/8 PASS.
+
+### Iter 20 — Phase 3 simplification
+- Backend `DOC_TYPES`: renamed "Bank Statement" → "Bank Passbook"; `DOC_REQUIREMENTS["Finance"] = [Aadhaar, PAN, Bank Passbook]`.
+- PUT `/api/leads/{id}` now validates `customer_type` whitelist (matches POST behaviour); empty string normalised to `null`.
+- Frontend `LeadDetail.jsx` follow-up form: minimal default (Type, Notes*, Next Date*, Next Time). Six secondary fields (Call Status, Customer Response, Outcome, Lead Temperature, Call Duration, Loss Reason block) hidden behind `fu-toggle-advanced` toggle (state `fuAdvanced`).
+- Tasks page already simple (Today/Missed/Upcoming/At Risk by `assigned_to` + `next_followup_date` + stage-as-status) — no changes.
+- Test: `/app/backend/tests/test_iter20_phase3.py` — 11/11 PASS.
+
+### Test reports
+- `/app/test_reports/iteration_19.json` (100% backend + frontend)
+- `/app/test_reports/iteration_20.json` (100% backend + frontend)
