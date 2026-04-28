@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { priorityStrip, priorityClass } from "../lib/labels";
 import PageHeader from "../components/PageHeader";
 
-const STAGES = ["Inquiry", "Follow-up", "Interest", "Test Ride", "Deal", "Booking", "Allotment", "Delivery", "Registration", "Feedback", "Lost"];
+const FALLBACK_STAGES = ["Inquiry", "Follow-up", "Hold", "Booking", "Delivery", "Allotment", "Feedback", "Lost"];
 
 export default function Funnel() {
   const { t } = useTranslation();
@@ -15,10 +15,14 @@ export default function Funnel() {
   const [leads, setLeads] = useState([]);
   const [branches, setBranches] = useState([]);
   const [branchFilter, setBranchFilter] = useState("");
+  const [stages, setStages] = useState(FALLBACK_STAGES);
 
   const isCEO = user?.role === "super_admin";
 
   useEffect(() => {
+    api.get("/constants").then((r) => {
+      if (r.data?.stages?.length) setStages(r.data.stages);
+    }).catch(() => {});
     if (isCEO) {
       api.get("/branches").then((r) => setBranches(r.data || [])).catch(() => {});
     }
@@ -30,10 +34,10 @@ export default function Funnel() {
   }, [branchFilter]);
 
   const byStage = useMemo(() => {
-    const m = Object.fromEntries(STAGES.map((s) => [s, []]));
+    const m = Object.fromEntries(stages.map((s) => [s, []]));
     leads.forEach((l) => { if (m[l.stage]) m[l.stage].push(l); });
     return m;
-  }, [leads]);
+  }, [leads, stages]);
 
   return (
     <>
@@ -58,7 +62,7 @@ export default function Funnel() {
       />
       <div className="p-3 sm:p-6 max-w-full">
         <div className="flex overflow-x-auto gap-3 pb-4 items-start" data-testid="funnel-board">
-          {STAGES.map((stage) => {
+          {stages.map((stage) => {
             const items = byStage[stage] || [];
             return (
               <div key={stage} className="kanban-col bg-zinc-50 border border-zinc-200 rounded-sm p-3" data-testid={`col-${stage}`}>

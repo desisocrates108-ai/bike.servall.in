@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 21 testing complete — backend pytest 5/5 PASS, frontend Playwright 100% PASS. Validated /constants stages == exact 8-stage list, DELETE /users/{id} (super=other 200, self 400, admin=403), Funnel renders exactly 8 kanban columns matching backend stages with no legacy columns, Users page conditional delete button visibility for super_admin, and full delete flow with confirm dialog + toast.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter21_funnel_user_delete.py",
+    "/app/test_reports/pytest/iter21_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py delete_user (line 927) correctly enforces super_admin via require_roles + self-delete guard at line 929 returning 400 'Cannot delete yourself' BEFORE the DB delete — order is correct.",
+    "Funnel.jsx fetches /constants stages and falls back to FALLBACK_STAGES (8-list); both paths now produce identical column set — defensive double-source-of-truth is fine but worth a one-line comment.",
+    "Users.jsx deleteUser uses native window.confirm — acceptable for an internal CRM but a shadcn AlertDialog would give better UX consistency with the rest of the app and is testable without page.on('dialog'). Non-blocking suggestion."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter21_funnel_user_delete.py"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100%"},
+  "test_credentials": "superadmin@dealer.com / super123 (only active production account)",
+  "seed_data_creation": "Backend test created 1 sales_executive + 1 branch admin + 1 sales_executive (admin's victim) — all 3 deleted via super DELETE. Frontend Playwright created 1 sales_executive (TEST_Iter21 PW Target) — deleted via UI flow. Final mongo cleanup regex ^TEST_Iter21 ran in TestZCleanup. No residual TEST_Iter21 records.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-21 delivered: (1) STAGES = ['Inquiry','Follow-up','Hold','Booking','Delivery','Allotment','Feedback','Lost'] in server.py L54; STAGE_ALIAS shim preserves legacy data-mapping. (2) DELETE /users/{id} is super_admin only with self-delete 400 guard. (3) Funnel.jsx FALLBACK_STAGES already mirrors the 8-list; reads /constants then overwrites. (4) Users.jsx uses isSuper && u.id !== user?.id to gate delete buttons (testids: delete-user-{id} desktop, delete-user-m-{id} mobile). Iter19 + Iter20 regression NOT re-run this iteration but no shared code touched. Note: a residual 'vimal' (sup@dealer.com Branch Admin) user exists in DB unrelated to Iter-21 — likely leftover from prior manual testing; flagging for awareness but NOT cleaning since not TEST_-prefixed.",
+  "rca of the issue": "N/A — no issues."
+}

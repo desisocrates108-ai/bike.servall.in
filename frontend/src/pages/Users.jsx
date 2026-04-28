@@ -15,7 +15,7 @@ import {
 } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { roleLabel } from "../lib/labels";
-import { UserPlus, Pencil, ChevronRight } from "lucide-react";
+import { UserPlus, Pencil, ChevronRight, Trash2 } from "lucide-react";
 
 const emptyForm = () => ({
   email: "", name: "", password: "", phone: "",
@@ -113,6 +113,24 @@ export default function Users() {
     }
   };
 
+  const isSuper = user?.role === "super_admin";
+
+  const deleteUser = async (u) => {
+    if (u.id === user?.id) {
+      toast.error("Cannot delete yourself");
+      return;
+    }
+    const ok = window.confirm(`Delete user "${u.name}" (${u.email})?\nThis cannot be undone.`);
+    if (!ok) return;
+    try {
+      await api.delete(`/users/${u.id}`);
+      toast.success("User deleted");
+      reload();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Delete failed");
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -193,6 +211,18 @@ export default function Users() {
                   <Button size="sm" variant="outline" className="rounded-sm" onClick={() => openEdit(u)} data-testid={`edit-user-${u.id}`}>
                     <Pencil className="w-3 h-3" />
                   </Button>
+                  {isSuper && u.id !== user?.id && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-sm border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                      onClick={() => deleteUser(u)}
+                      data-testid={`delete-user-${u.id}`}
+                      title="Delete user"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -219,6 +249,18 @@ export default function Users() {
             <Button size="sm" variant="outline" className="rounded-sm" onClick={() => openEdit(u)} data-testid={`edit-user-m-${u.id}`}>
               <Pencil className="w-3 h-3" />
             </Button>
+            {isSuper && u.id !== user?.id && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-sm border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                onClick={() => deleteUser(u)}
+                data-testid={`delete-user-m-${u.id}`}
+                title="Delete user"
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
           </div>
         ))}
       </div>
