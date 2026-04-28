@@ -251,3 +251,13 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
 
 ### Test report
 `/app/test_reports/iteration_21.json` — backend pytest 5/5 + frontend Playwright 100% PASS.
+
+## 2026-04-28 — Iteration 22: Call + WA history inside Follow-ups tab
+- **Removed standalone WhatsApp tab** from LeadDetail (between Documents and Timeline). Per-lead WhatsApp messaging now lives inside the Follow-ups tab.
+- **Follow-ups tab layout** is now a 2-column grid below the "Log a follow-up" form:
+  - Left: **Call & Visit History** card — filters followups `type !== 'WhatsApp'`. Includes a "Call now" quick-action button (`tel:{lead.phone}` href).
+  - Right: **WhatsApp panel** — embedded `WhatsappSection` (testid `followup-whatsapp-panel`) showing full message thread + send composer.
+- Global `/whatsapp` side-nav route is unchanged; only the per-lead tab was consolidated.
+
+### Test report
+`/app/test_reports/iteration_22.json` — backend 5/5 + frontend 100% PASS.
