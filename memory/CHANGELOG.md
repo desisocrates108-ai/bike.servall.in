@@ -277,3 +277,28 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
 
 ### Test report
 `/app/test_reports/iteration_23.json` — frontend 100% PASS (default chromium hides button correctly; iOS Safari UA simulation shows button + dialog with 3 steps + close button; regression smoke on /funnel, /users, /leads all green).
+
+## 2026-04-28 — Iteration 24: Production hardening (security + edit/delete lead)
+### Security
+- **Removed "Quick Demo Logins"** section from `Login.jsx` — no exposed credentials.
+- **Removed default email/password values** — fields are empty on page load with placeholders "Enter Email" / "Enter Password".
+- Added `autoComplete="off"` / `"new-password"` to discourage browser autofill.
+
+### Edit Lead
+- New **"Edit Lead"** button on LeadDetail (visible to all roles).
+- Dialog edits: customer_name (required), phone (required, format /^[0-9+\\-\\s]{7,15}$/), alt_phone, address, brand/model/variant/color, customer_type, deal.final_deal_price.
+- **Stage override** dropdown shown only for admin/super_admin (sales_executive UI gate).
+- Backend `LeadUpdate` model now accepts `stage` (whitelist-validated against STAGES); update_lead returns 403 when sales_executive sends stage.
+
+### Delete Lead (cascade)
+- New **"Delete Lead"** button on LeadDetail (admin/super_admin only).
+- Confirmation via shadcn `AlertDialog` with exact title "Are you sure?" and detailed message listing what gets removed.
+- Backend `DELETE /api/leads/{id}` (admin/super_admin):
+  - Releases any inventory chassis booked by the lead (status → Available, booked_by_lead → null)
+  - Cascade deletes from 11 related collections: followups, finance_cases, bookings, allotments, deliveries, payments, wa_messages, timeline, negotiation_history, documents, files, reminders
+  - Final delete of the lead doc itself
+  - Audit log "lead_deleted" with deleted_counts in meta
+  - Admin restricted to own branch, sales_executive blocked
+
+### Test report
+`/app/test_reports/iteration_24.json` — backend 10/10 + frontend 24/24 PASS.
