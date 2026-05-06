@@ -364,10 +364,10 @@ class LeadUpdate(BaseModel):
     birthdate: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
-    source: Optional[str] = None
     branch_id: Optional[str] = None
-    priority: Optional[str] = None
     assigned_to: Optional[str] = None
+    source: Optional[str] = None
+    priority: Optional[str] = None
     brand_id: Optional[str] = None
     model_id: Optional[str] = None
     variant_id: Optional[str] = None
@@ -385,6 +385,7 @@ class LeadUpdate(BaseModel):
     next_followup_time: Optional[str] = None
     next_followup_type: Optional[str] = None
     notes: Optional[str] = None
+    stage: Optional[str] = None  # admin/super_admin override only (skips form-gating)
 
 
 class StageChange(BaseModel):
@@ -1400,6 +1401,18 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
             raise HTTPException(400, f"Invalid customer_type. Use one of: {CUSTOMER_TYPES}")
         updates["customer_type"] = ct or None
 
+    # Stage override (admin/super_admin only) — skips form-gating, useful for fixing mistakes
+    if "stage" in updates:
+        if user["role"] == "sales_executive":
+            raise HTTPException(403, "Sales executives cannot override stage; use Change Stage flow")
+        new_stage = updates["stage"]
+        if new_stage not in STAGES:
+            # try alias
+            new_stage = STAGE_ALIAS.get(new_stage, new_stage)
+            if new_stage not in STAGES:
+                raise HTTPException(400, f"Invalid stage. Use one of: {STAGES}")
+        updates["stage"] = new_stage
+
     # Conditional cleanup — if switching Exchange → New Purchase, wipe exchange docs/photos
     # (Keep identity_docs intact since Aadhaar is common to both.)
     if updates.get("purchase_type") == "New Purchase" and (lead.get("purchase_type") or "") == "Exchange Vehicle":
@@ -1450,6 +1463,50 @@ async def update_lead(lid: str, body: LeadUpdate, user: dict = Depends(get_curre
                         branch_id=lead.get("branch_id"),
                         meta={"fields": list(updates.keys())})
     return await db.leads.find_one({"id": lid}, {"_id": 0})
+
+
+@api.delete("/leads/{lid}")
+async def delete_lead(lid: str, user: dict = Depends(require_roles("super_admin", "admin"))):
+    """Permanent cascade delete of a lead and ALL associated data.
+    - super_admin: any branch
+    - admin: only own branch
+    - sales_executive: forbidden
+    """
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if user["role"] == "admin" and lead.get("branch_id") != user.get("branch_id"):
+        raise HTTPException(403, "Cannot delete leads outside your branch")
+
+    # Release any inventory chassis booked by this lead
+    await db.inventory.update_many(
+        {"booked_by_lead": lid},
+        {"$set": {"status": "Available", "booked_by_lead": None, "booked_at": None}},
+    )
+
+    # Cascade delete every collection that may reference lead_id = lid
+    related = [
+        "followups", "finance_cases", "bookings", "allotments", "deliveries",
+        "payments", "wa_messages", "timeline", "negotiation_history",
+        "documents", "files", "reminders",
+    ]
+    deleted_counts = {}
+    for coll in related:
+        r = await db[coll].delete_many({"lead_id": lid})
+        deleted_counts[coll] = r.deleted_count
+
+    # Finally delete the lead itself
+    await db.leads.delete_one({"id": lid})
+
+    await log_audit(user, "lead_deleted", entity_type="lead", entity_id=lid,
+                    branch_id=lead.get("branch_id"),
+                    meta={"customer_name": lead.get("customer_name"),
+                          "phone": lead.get("phone"),
+                          "stage": lead.get("stage"),
+                          "deleted_counts": deleted_counts})
+    return {"ok": True, "deleted": deleted_counts}
+
+
 
 
 @api.post("/leads/{lid}/deal/request-approval")

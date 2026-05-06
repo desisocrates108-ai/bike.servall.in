@@ -14,8 +14,8 @@ const HERO =
 
 export default function Login() {
   const { t } = useTranslation();
-  const [email, setEmail] = useState("superadmin@dealer.com");
-  const [password, setPassword] = useState("super123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -31,11 +31,6 @@ export default function Login() {
     } else {
       toast.error(res.error || t("login.invalid"));
     }
-  };
-
-  const quickLogin = (mail, pw) => {
-    setEmail(mail);
-    setPassword(pw);
   };
 
   return (
@@ -65,14 +60,17 @@ export default function Login() {
             {t("login.subtitle")}
           </p>
 
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="space-y-4" autoComplete="off">
             <div>
               <Label htmlFor="email" className="overline">{t("login.email")}</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter Email"
+                autoComplete="off"
                 className="mt-2 rounded-sm"
                 data-testid="login-email-input"
                 required
@@ -82,9 +80,12 @@ export default function Login() {
               <Label htmlFor="password" className="overline">{t("login.password")}</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter Password"
+                autoComplete="new-password"
                 className="mt-2 rounded-sm"
                 data-testid="login-password-input"
                 required
@@ -99,39 +100,6 @@ export default function Login() {
               {busy ? t("login.signing_in") : t("login.sign_in")} <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </form>
-
-          <div className="mt-10 p-4 border border-dashed border-zinc-300 rounded-sm">
-            <div className="overline mb-3">Quick demo logins</div>
-            <div className="space-y-2 text-sm">
-              <button
-                onClick={() => quickLogin("superadmin@dealer.com", "super123")}
-                className="w-full text-left hover:bg-zinc-50 px-3 py-2 rounded-sm flex justify-between"
-                data-testid="quick-login-super"
-                type="button"
-              >
-                <span className="font-medium">{t("role.super_admin")}</span>
-                <span className="text-zinc-500 font-mono text-xs">super123</span>
-              </button>
-              <button
-                onClick={() => quickLogin("admin@dealer.com", "admin123")}
-                className="w-full text-left hover:bg-zinc-50 px-3 py-2 rounded-sm flex justify-between"
-                data-testid="quick-login-admin"
-                type="button"
-              >
-                <span className="font-medium">{t("role.admin")}</span>
-                <span className="text-zinc-500 font-mono text-xs">admin123</span>
-              </button>
-              <button
-                onClick={() => quickLogin("sales1@dealer.com", "sales123")}
-                className="w-full text-left hover:bg-zinc-50 px-3 py-2 rounded-sm flex justify-between"
-                data-testid="quick-login-sales"
-                type="button"
-              >
-                <span className="font-medium">{t("role.sales_executive")}</span>
-                <span className="text-zinc-500 font-mono text-xs">sales123</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 

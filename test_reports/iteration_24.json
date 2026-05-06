@@ -1,0 +1,27 @@
+{
+  "summary": "Iter 24 production-hardening (Servall CRM) — Login cleanup + Edit Lead + Delete Lead cascade — FULL PASS. Backend: 10/10 pytest pass (PUT stage whitelist 400, sales_exec stage override 403, super_admin stage override ok, admin cross-branch delete 403, sales_exec delete 403, super_admin cascade delete returns all 11 collection counts + 404 on get, nonexistent delete 404, superadmin login regression). Frontend (Playwright): 24/24 PASS — Quick demo logins removed (0 elements), email/password empty on load with correct placeholders 'Enter Email' / 'Enter Password', Edit Lead dialog contains all 11 expected fields (edit-name/phone/alt-phone/customer-type/address/brand/model/variant/color/final-price/stage), empty name → 'Customer name is required' toast, phone='abc' → 'Invalid phone' toast, happy-path save updates header, Delete Lead AlertDialog shows 'Are you sure?' title with 'permanently' + 'follow-up' mentioned, Cancel closes dialog, Confirm Delete navigates to /leads with success toast 'Lead deleted permanently', subsequent GET /api/leads/{id} returns 404.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter24_edit_delete_lead.py",
+    "/app/test_reports/pytest/iter24_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LeadDetail.jsx is 1325 lines — exceeds 700-line guideline. Consider splitting Edit/Delete dialogs into separate subcomponents in a future iteration.",
+    "Cascade delete loops 12 collections sequentially with individual awaits. For high-volume tenants this could be slow; consider asyncio.gather or a single bulk operation. Acceptable for current scale.",
+    "Delete confirmation dialog hard-codes the cascade description in UI. If backend adds new collections, the message could drift. Consider driving it from a shared constant or the backend's deletion_counts schema.",
+    "No audit-log UI for 'lead_deleted' event is exposed — audit entries are created (good) but not visible in the admin audit logs surface (would improve trust in destructive ops)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter24_edit_delete_lead.py",
+    "/app/test_reports/iteration_24.json"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (24/24)"},
+  "test_credentials": "superadmin@dealer.com / super123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "All TEST_Iter24_ prefixed users (sales_executive + admin-other-branch) and TEST_Iter24 leads are auto-cleaned by fixtures and by the delete-lead flow under test. No residual TEST_ data after run. The pre-existing TEST_Iter19/20/21 leads in DB are untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 24 feature set is fully verified end-to-end. Backend tests live at /app/backend/tests/test_iter24_edit_delete_lead.py — can be re-run with `REACT_APP_BACKEND_URL=https://servall-mobile.preview.emergentagent.com pytest backend/tests/test_iter24_edit_delete_lead.py`. The test suite creates/cleans its own TEST_ sales_exec + admin users via the super_admin fixture, so it's safe to run repeatedly without polluting production. Frontend flow uses super_admin to create a TEST_ lead via page.evaluate fetch, then exercises edit + delete on it, so no persistent test data is left behind. Note: sales_executive-specific UI gating (edit-stage hidden, delete-lead-btn hidden) was NOT exercised via UI playwright because cross-role browser switching is expensive — backend 403 tests cover it authoritatively. If a future iter needs the UI gate verified, create a sales_exec via API, login in a fresh browser context, and assert absence of those testids.",
+  "rca_of_the_issue": "No bugs. Two minor playwright hiccups during iteration: (1) first lead <a> tag returned '/leads/new' as the first href in DOM order — resolved by creating a dedicated TEST lead via fetch + direct navigate; (2) page.evaluate with multiple positional args failed (Playwright Python accepts only one arg) — resolved by packing args into a single object. Both are test-harness fixes, not product bugs."
+}

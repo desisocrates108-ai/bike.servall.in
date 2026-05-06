@@ -6,6 +6,7 @@ import { priorityClass, stageClass } from "../lib/labels";
 import {
   ArrowLeft, Phone, MapPin, Calendar, Upload, FileText, Clock, User,
   PhoneCall, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, ChevronRight,
+  Pencil, Trash2,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { Button } from "../components/ui/button";
@@ -17,8 +18,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "../components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import BookingSection from "../components/BookingSection";
 import ExchangeSection from "../components/ExchangeSection";
 import IdentityDocsPanel from "../components/IdentityDocsPanel";
@@ -230,6 +235,104 @@ export default function LeadDetail() {
     setReminderOpen(true);
   };
 
+  // Edit Lead
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    customer_name: "", phone: "", alt_phone: "", address: "",
+    brand_id: "", model_id: "", variant_id: "", color_id: "",
+    customer_type: "", final_deal_price: "", stage: "",
+  });
+  const [editModels, setEditModels] = useState([]);
+  const [editVariants, setEditVariants] = useState([]);
+
+  const openEdit = () => {
+    setEditForm({
+      customer_name: lead?.customer_name || "",
+      phone: lead?.phone || "",
+      alt_phone: lead?.alt_phone || "",
+      address: lead?.address || "",
+      brand_id: lead?.brand_id || "",
+      model_id: lead?.model_id || "",
+      variant_id: lead?.variant_id || "",
+      color_id: lead?.color_id || "",
+      customer_type: lead?.customer_type || "",
+      final_deal_price: (lead?.deal?.final_deal_price ?? "") + "",
+      stage: lead?.stage || "",
+    });
+    setEditOpen(true);
+  };
+
+  // load models/variants when brand/model changes inside edit dialog
+  useEffect(() => {
+    if (editForm.brand_id) {
+      api.get("/models", { params: { brand_id: editForm.brand_id } }).then((r) => setEditModels(r.data));
+    } else setEditModels([]);
+  }, [editForm.brand_id]);
+  useEffect(() => {
+    if (editForm.model_id) {
+      api.get("/variants", { params: { model_id: editForm.model_id } }).then((r) => setEditVariants(r.data));
+    } else setEditVariants([]);
+  }, [editForm.model_id]);
+
+  const saveEdit = async () => {
+    // Validation
+    const name = editForm.customer_name.trim();
+    const phone = (editForm.phone || "").trim();
+    if (!name) { toast.error("Customer name is required"); return; }
+    if (!phone) { toast.error("Phone is required"); return; }
+    if (!/^[0-9+\-\s]{7,15}$/.test(phone)) { toast.error("Invalid phone number"); return; }
+    setEditSaving(true);
+    try {
+      const payload = {
+        customer_name: name,
+        phone,
+        alt_phone: editForm.alt_phone || null,
+        address: editForm.address || null,
+        brand_id: editForm.brand_id || null,
+        model_id: editForm.model_id || null,
+        variant_id: editForm.variant_id || null,
+        color_id: editForm.color_id || null,
+        customer_type: editForm.customer_type || "",
+      };
+      // Final deal price (only send if changed and is a number)
+      if (editForm.final_deal_price !== "" && editForm.final_deal_price != null) {
+        const fdp = Number(editForm.final_deal_price);
+        if (!Number.isNaN(fdp)) {
+          payload.deal = { ...(lead?.deal || {}), final_deal_price: fdp };
+        }
+      }
+      // Stage (admin/super_admin only)
+      if (isManager && editForm.stage && editForm.stage !== lead.stage) {
+        payload.stage = editForm.stage;
+      }
+      await api.put(`/leads/${id}`, payload);
+      toast.success("Lead updated");
+      setEditOpen(false);
+      reload();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Update failed");
+    }
+    setEditSaving(false);
+  };
+
+  // Delete Lead
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/leads/${id}`);
+      toast.success("Lead deleted permanently");
+      setDeleteOpen(false);
+      nav("/leads");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Delete failed");
+      setDeleting(false);
+    }
+  };
+
   const saveDeal = async () => {
     try {
       const n = (v) => v === "" || v == null ? null : Number(v);
@@ -363,6 +466,24 @@ export default function LeadDetail() {
           >
             <Clock className="w-4 h-4 mr-1" /> Set Reminder
           </Button>
+          <Button
+            variant="outline"
+            onClick={openEdit}
+            className="rounded-sm font-semibold"
+            data-testid="edit-lead-btn"
+          >
+            <Pencil className="w-4 h-4 mr-1" /> Edit Lead
+          </Button>
+          {isManager && (
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(true)}
+              className="rounded-sm font-semibold border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              data-testid="delete-lead-btn"
+            >
+              <Trash2 className="w-4 h-4 mr-1" /> Delete Lead
+            </Button>
+          )}
           <Dialog open={stageDialog} onOpenChange={setStageDialog}>
             <DialogTrigger asChild>
               <Button className="rounded-sm bg-brand hover:bg-brand-dark font-bold w-full sm:w-auto" data-testid="change-stage-btn">
@@ -446,6 +567,131 @@ export default function LeadDetail() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Edit Lead dialog */}
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="edit-lead-dialog">
+              <DialogHeader>
+                <DialogTitle>Edit Lead</DialogTitle>
+                <DialogDescription>Update customer, vehicle and deal details. Stage override available for managers.</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+                <div>
+                  <Label className="overline">Customer Name *</Label>
+                  <Input value={editForm.customer_name} onChange={(e) => setEditForm((s) => ({ ...s, customer_name: e.target.value }))} className="mt-2" data-testid="edit-name" required />
+                </div>
+                <div>
+                  <Label className="overline">Phone *</Label>
+                  <Input value={editForm.phone} onChange={(e) => setEditForm((s) => ({ ...s, phone: e.target.value }))} className="mt-2" data-testid="edit-phone" required />
+                </div>
+                <div>
+                  <Label className="overline">Alternate Phone</Label>
+                  <Input value={editForm.alt_phone} onChange={(e) => setEditForm((s) => ({ ...s, alt_phone: e.target.value }))} className="mt-2" data-testid="edit-alt-phone" />
+                </div>
+                <div>
+                  <Label className="overline">Customer Type</Label>
+                  <Select value={editForm.customer_type || "__NONE__"} onValueChange={(v) => setEditForm((s) => ({ ...s, customer_type: v === "__NONE__" ? "" : v }))}>
+                    <SelectTrigger className="mt-2" data-testid="edit-customer-type"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__NONE__">—</SelectItem>
+                      {(constants?.customer_types || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="overline">Address</Label>
+                  <Textarea rows={2} value={editForm.address} onChange={(e) => setEditForm((s) => ({ ...s, address: e.target.value }))} className="mt-2" data-testid="edit-address" />
+                </div>
+                <div>
+                  <Label className="overline">Brand</Label>
+                  <Select value={editForm.brand_id || "__NONE__"} onValueChange={(v) => setEditForm((s) => ({ ...s, brand_id: v === "__NONE__" ? "" : v, model_id: "", variant_id: "" }))}>
+                    <SelectTrigger className="mt-2" data-testid="edit-brand"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__NONE__">—</SelectItem>
+                      {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="overline">Model</Label>
+                  <Select value={editForm.model_id || "__NONE__"} onValueChange={(v) => setEditForm((s) => ({ ...s, model_id: v === "__NONE__" ? "" : v, variant_id: "" }))}>
+                    <SelectTrigger className="mt-2" data-testid="edit-model"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__NONE__">—</SelectItem>
+                      {editModels.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="overline">Variant</Label>
+                  <Select value={editForm.variant_id || "__NONE__"} onValueChange={(v) => setEditForm((s) => ({ ...s, variant_id: v === "__NONE__" ? "" : v }))}>
+                    <SelectTrigger className="mt-2" data-testid="edit-variant"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__NONE__">—</SelectItem>
+                      {editVariants.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="overline">Color</Label>
+                  <Select value={editForm.color_id || "__NONE__"} onValueChange={(v) => setEditForm((s) => ({ ...s, color_id: v === "__NONE__" ? "" : v }))}>
+                    <SelectTrigger className="mt-2" data-testid="edit-color"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__NONE__">—</SelectItem>
+                      {colors.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="overline">Final Deal Price (₹)</Label>
+                  <Input type="number" value={editForm.final_deal_price} onChange={(e) => setEditForm((s) => ({ ...s, final_deal_price: e.target.value }))} className="mt-2" data-testid="edit-final-price" />
+                </div>
+                {isManager && (
+                  <div className="md:col-span-2">
+                    <Label className="overline">Stage (manager override)</Label>
+                    <Select value={editForm.stage} onValueChange={(v) => setEditForm((s) => ({ ...s, stage: v }))}>
+                      <SelectTrigger className="mt-2" data-testid="edit-stage"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(constants?.stages || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <div className="text-xs text-zinc-500 mt-1">
+                      Direct stage override skips form-gating. Use only to fix mistakes.
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+                <Button onClick={saveEdit} disabled={editSaving} className="bg-brand hover:bg-brand-dark" data-testid="save-edit-lead-btn">
+                  {editSaving ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Lead confirmation */}
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogContent data-testid="delete-lead-confirm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete the lead <b>{lead.customer_name}</b> ({lead.phone}) and all associated data — follow-ups, documents, photos, deal, booking, payments, finance, WhatsApp messages and timeline. Inventory chassis (if booked) will be released back to available stock. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="delete-lead-cancel">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-500"
+                  data-testid="delete-lead-confirm-btn"
+                >
+                  {deleting ? "Deleting…" : "Confirm Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
