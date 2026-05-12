@@ -302,3 +302,11 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
 
 ### Test report
 `/app/test_reports/iteration_24.json` — backend 10/10 + frontend 24/24 PASS.
+
+## 2026-04-28 — Iteration 25: Purge with keep_users flag
+- Backend `POST /api/admin/purge-demo-data` now accepts `keep_users=true` query param. When set, all non-super-admin users are preserved (only transactional data wiped).
+- Frontend Integrations Danger Zone split into 2 buttons:
+  - **"Wipe Transactions (Keep Users)"** (amber) — testid `purge-keep-users-btn` — calls purge with keep_users=true
+  - **"Full Reset (Also delete users)"** (rose) — testid `purge-btn` — existing aggressive behavior
+- Stats response includes `users_kept` count when keep_users=true.
+- Preview smoke test: 8 leads + 2 followups + 17 WA msgs + 128 audit logs + 1 file + 3 automation rules wiped. 3 users (super_admin + admin + sales_exec) preserved intact.

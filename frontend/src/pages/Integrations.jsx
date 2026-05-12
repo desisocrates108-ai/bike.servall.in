@@ -210,23 +210,25 @@ function DangerZone() {
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
 
-  const purge = async () => {
+  const purge = async (keepUsers) => {
     if (text !== "PURGE") {
       toast.error("Type PURGE in the box first");
       return;
     }
-    if (!window.confirm("⚠️ This permanently deletes ALL leads, files, follow-ups, deliveries, bookings, campaigns, and all non-super-admin users. Branches and master data are kept. Are you ABSOLUTELY sure?")) {
-      return;
-    }
+    const message = keepUsers
+      ? "⚠️ This permanently deletes ALL leads, follow-ups, bookings, deliveries, payments, documents, files, campaigns, automations, audit logs and inventory.\n\nUsers, branches and master data will be KEPT. Are you sure?"
+      : "⚠️ This permanently deletes ALL leads, files, follow-ups, deliveries, bookings, campaigns, AUDIT LOGS and ALL non-super-admin USERS. Branches and master data are kept. Are you ABSOLUTELY sure?";
+    if (!window.confirm(message)) return;
     setBusy(true);
     try {
       const { data } = await api.post("/admin/purge-demo-data", null, {
-        params: { confirm: "SERVALL_PURGE" },
+        params: { confirm: "SERVALL_PURGE", keep_users: keepUsers },
       });
-      const total = Object.values(data.stats || {}).reduce((s, n) => s + (typeof n === "number" ? n : 0), 0);
+      const total = Object.entries(data.stats || {})
+        .filter(([k]) => !k.startsWith("users_"))
+        .reduce((s, [, n]) => s + (typeof n === "number" ? n : 0), 0);
       toast.success(`Purged ${total} records. System is now in production mode.`);
       setText("");
-      // Reload after 1.5s so user sees toast
       setTimeout(() => window.location.reload(), 1500);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Purge failed");
@@ -242,29 +244,53 @@ function DangerZone() {
         <div className="font-display font-bold text-rose-700 uppercase tracking-wider text-sm">Danger Zone — Production Reset</div>
       </div>
       <div className="text-sm text-zinc-700 mb-3">
-        Wipes ALL transactional data permanently — leads, files, follow-ups, deliveries, bookings, campaigns, audit logs, and all non-super-admin users.
-        <br />
-        <span className="text-emerald-700 font-semibold">Preserved:</span> Branches, master data (brands/models/colors), default WA templates, and your super-admin account.
+        Choose what to wipe. Type <span className="font-mono font-bold text-rose-700">PURGE</span> below to enable both buttons.
       </div>
-      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-        <div className="flex-1">
-          <Label className="overline">Type <span className="font-mono font-bold text-rose-700">PURGE</span> to enable</Label>
-          <Input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="PURGE"
-            className="font-mono"
-            data-testid="purge-confirm-input"
-          />
+      <div className="mb-3">
+        <Label className="overline">Type <span className="font-mono font-bold text-rose-700">PURGE</span> to enable</Label>
+        <Input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="PURGE"
+          className="font-mono"
+          data-testid="purge-confirm-input"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Safer option — keep users */}
+        <div className="border border-amber-300 bg-amber-50/50 rounded-sm p-3">
+          <div className="font-bold text-amber-800 text-sm uppercase tracking-wider mb-1">Wipe Transactions Only</div>
+          <div className="text-xs text-zinc-600 mb-3">
+            Deletes leads, follow-ups, bookings, deliveries, payments, files, campaigns, automations, audit logs, inventory.<br />
+            <span className="text-emerald-700 font-semibold">Keeps:</span> all users, branches, master data.
+          </div>
+          <Button
+            onClick={() => purge(true)}
+            disabled={busy || text !== "PURGE"}
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-sm h-10"
+            data-testid="purge-keep-users-btn"
+          >
+            <Trash2 className="w-4 h-4 mr-2" /> {busy ? "Wiping…" : "Wipe Transactions (Keep Users)"}
+          </Button>
         </div>
-        <Button
-          onClick={purge}
-          disabled={busy || text !== "PURGE"}
-          className="bg-rose-600 hover:bg-rose-700 text-white rounded-sm h-11 px-6"
-          data-testid="purge-btn"
-        >
-          <Trash2 className="w-4 h-4 mr-2" /> {busy ? "Purging…" : "Reset all demo data"}
-        </Button>
+
+        {/* Full reset — also wipes users */}
+        <div className="border border-rose-300 bg-white rounded-sm p-3">
+          <div className="font-bold text-rose-700 text-sm uppercase tracking-wider mb-1">Full Production Reset</div>
+          <div className="text-xs text-zinc-600 mb-3">
+            Everything above <b>PLUS</b> all non-super-admin users (Branch Admins, Sales Executives).<br />
+            <span className="text-emerald-700 font-semibold">Keeps:</span> super-admin, branches, master data.
+          </div>
+          <Button
+            onClick={() => purge(false)}
+            disabled={busy || text !== "PURGE"}
+            className="w-full bg-rose-600 hover:bg-rose-700 text-white rounded-sm h-10"
+            data-testid="purge-btn"
+          >
+            <Trash2 className="w-4 h-4 mr-2" /> {busy ? "Purging…" : "Full Reset (Also delete users)"}
+          </Button>
+        </div>
       </div>
     </section>
   );

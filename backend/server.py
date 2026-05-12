@@ -4252,9 +4252,16 @@ async def analytics_deals(user: dict = Depends(get_current_user)):
 async def purge_demo_data(
     confirm: str = "",
     keep_master_data: bool = True,
+    keep_users: bool = False,
     user: dict = Depends(get_current_user),
 ):
-    """DESTRUCTIVE. Super-admin only. Wipes all transactional data for production go-live."""
+    """DESTRUCTIVE. Super-admin only. Wipes all transactional data for production go-live.
+
+    Flags:
+      keep_master_data=True (default)  → preserves brands/models/variants/colors
+      keep_users=True                   → preserves all users (admin + sales execs); only wipes
+                                          transactional collections (leads, bookings, etc.)
+    """
     if user.get("role") != "super_admin":
         raise HTTPException(403, "Only super admin can purge data")
     if confirm != "SERVALL_PURGE":
@@ -4271,9 +4278,12 @@ async def purge_demo_data(
         res = await db[col].delete_many({})
         stats[col] = res.deleted_count
 
-    # Delete non-super-admin users
-    res = await db.users.delete_many({"role": {"$ne": "super_admin"}})
-    stats["users_deleted"] = res.deleted_count
+    # Delete non-super-admin users UNLESS keep_users is set
+    if not keep_users:
+        res = await db.users.delete_many({"role": {"$ne": "super_admin"}})
+        stats["users_deleted"] = res.deleted_count
+    else:
+        stats["users_kept"] = await db.users.count_documents({})
 
     # Optionally wipe master data
     if not keep_master_data:
@@ -4290,6 +4300,7 @@ async def purge_demo_data(
             "purged_by": user["id"],
             "purged_by_name": user["name"],
             "purged_at": now_iso(),
+            "kept_users": keep_users,
         }},
         upsert=True,
     )
