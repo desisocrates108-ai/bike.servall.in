@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../components/ui/select";
 import { toast } from "sonner";
-import { Zap, Save, AlertTriangle, Trash2 } from "lucide-react";
+import { Zap, Save, AlertTriangle, Trash2, Download } from "lucide-react";
 
 const TRIGGERS = [
   { key: "inquiry_created", label: "New Inquiry", desc: "Auto-send message when a lead is created" },
@@ -48,7 +48,10 @@ export default function Integrations() {
     }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    // Defer initial load to next microtask so React's set-state-in-effect rule is satisfied
+    Promise.resolve().then(reload);
+  }, []);
 
   const save = async () => {
     setSaving(true);
@@ -200,9 +203,61 @@ export default function Integrations() {
           </div>
         </section>
 
+        {isSuper && <DataExport />}
         {isSuper && <DangerZone />}
       </div>
     </>
+  );
+}
+
+function DataExport() {
+  const [busy, setBusy] = useState(false);
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      const res = await api.get("/admin/export-data", { responseType: "blob" });
+      // Try to use server-suggested filename
+      const cd = res.headers["content-disposition"] || "";
+      const m = cd.match(/filename="?([^"]+)"?/);
+      const fname = m ? m[1] : `servall_crm_export_${new Date().toISOString().slice(0,19).replace(/[:T-]/g,"")}.json`;
+      const blob = new Blob([res.data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${fname}`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Export failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="border-2 border-emerald-300 rounded-sm p-4 sm:p-5 bg-emerald-50/40 mt-4" data-testid="sec-data-export">
+      <div className="flex items-center gap-2 mb-3">
+        <Download className="w-5 h-5 text-emerald-700" />
+        <div className="font-display font-bold text-emerald-800 uppercase tracking-wider text-sm">Data Export — Full Backup</div>
+      </div>
+      <div className="text-sm text-zinc-700 mb-3">
+        Download all CRM data as a single JSON file — users, branches, leads, follow-ups, bookings, payments, vehicles (brands/models/variants/colors), WA messages, audit logs and more.
+        <br />
+        <span className="text-zinc-500 text-xs">Password hashes and internal MongoDB IDs are excluded for safety. Use this file for backup, migration or audit.</span>
+      </div>
+      <Button
+        onClick={download}
+        disabled={busy}
+        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm h-10 px-5"
+        data-testid="export-data-btn"
+      >
+        <Download className="w-4 h-4 mr-2" /> {busy ? "Preparing…" : "Download All Data (JSON)"}
+      </Button>
+    </section>
   );
 }
 

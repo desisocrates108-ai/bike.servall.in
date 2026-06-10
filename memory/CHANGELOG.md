@@ -310,3 +310,9 @@ Post-test cleanup re-run to remove test agent's ephemeral user `uday@gmail.com` 
   - **"Full Reset (Also delete users)"** (rose) — testid `purge-btn` — existing aggressive behavior
 - Stats response includes `users_kept` count when keep_users=true.
 - Preview smoke test: 8 leads + 2 followups + 17 WA msgs + 128 audit logs + 1 file + 3 automation rules wiped. 3 users (super_admin + admin + sales_exec) preserved intact.
+
+## 2026-06-10 — Iteration 26: Data Export
+- New endpoint `GET /api/admin/export-data` (super-admin only) — streams entire database as one JSON file (all 27 collections). Auto-named `servall_crm_export_YYYYMMDD_HHMMSS.json`. Excludes `_id` and `password_hash` for safety. Audit logged as `data_exported`.
+- Integrations page → new emerald **"Data Export — Full Backup"** section above Danger Zone. Button `export-data-btn` triggers blob download via responseType:"blob" with Content-Disposition filename respected.
+- Smoke test: 38KB JSON downloaded with manifest + 25 populated collections (users:3, branches:5, brands:4, vehicle_models:9, variants:24 etc.). All ObjectId/password_hash fields stripped.
+- Fixed pre-existing `react-hooks/set-state-in-effect` lint in Integrations.jsx by deferring initial `reload()` call to microtask via `Promise.resolve().then(reload)`.

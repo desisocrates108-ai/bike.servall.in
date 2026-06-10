@@ -4248,6 +4248,51 @@ async def analytics_deals(user: dict = Depends(get_current_user)):
 # Admin — Production data purge
 # ============================================================
 
+@api.get("/admin/export-data")
+async def export_data(user: dict = Depends(get_current_user)):
+    """Export ALL collections as a single JSON file. Super-admin only.
+    Returns a downloadable JSON with all data, suitable for backup or migration.
+    Excludes MongoDB `_id` and `password_hash` for safety.
+    """
+    if user.get("role") != "super_admin":
+        raise HTTPException(403, "Only super admin can export data")
+
+    import json as _json
+    collections = [
+        "users", "branches", "leads",
+        "followups", "bookings", "deliveries", "allotments", "payments",
+        "documents", "files", "exchange_valuations", "negotiation_history",
+        "timeline", "wa_messages", "wa_templates",
+        "campaigns", "automation_rules", "finance_cases", "inventory",
+        "brands", "vehicle_models", "variants", "colors",
+        "audit_logs", "reminders", "system_flags",
+    ]
+    export: Dict[str, Any] = {
+        "exported_at": now_iso(),
+        "exported_by": {"id": user["id"], "name": user["name"], "email": user.get("email")},
+        "db_name": DB_NAME,
+        "collections": {},
+        "counts": {},
+    }
+    for coll in collections:
+        try:
+            docs = await db[coll].find({}, {"_id": 0, "password_hash": 0}).to_list(None)
+            # datetime → iso strings for clean JSON
+            export["collections"][coll] = docs
+            export["counts"][coll] = len(docs)
+        except Exception as e:
+            export["counts"][coll] = f"ERR: {e}"
+
+    payload = _json.dumps(export, ensure_ascii=False, indent=2, default=str)
+    fname = f"servall_crm_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+    await log_audit(user, "data_exported", entity_type="system",
+                    meta={"counts": export["counts"]})
+    return FastResponse(
+        content=payload,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
 @api.post("/admin/purge-demo-data")
 async def purge_demo_data(
     confirm: str = "",
