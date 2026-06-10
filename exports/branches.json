@@ -1,0 +1,57 @@
+[
+  {
+    "id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "name": "Bilimora",
+    "code": "BLM",
+    "address": null,
+    "created_at": "2026-04-20T12:00:42.806579+00:00",
+    "allow_login_when_inactive": true,
+    "city": "Bilimora",
+    "is_active": true,
+    "assigned_admin_id": "e2205a9c-9a5e-40f6-bee4-c3c248304377"
+  },
+  {
+    "id": "681b1eaf-16ec-4925-b065-bf4831b8b783",
+    "name": "Chikhli",
+    "code": "CHK",
+    "address": "",
+    "created_at": "2026-04-20T12:00:42.815995+00:00",
+    "allow_login_when_inactive": true,
+    "city": "Chikhli",
+    "is_active": true,
+    "assigned_admin_id": "e2205a9c-9a5e-40f6-bee4-c3c248304377"
+  },
+  {
+    "id": "a8d8185d-0e3f-4fda-baba-cb6afcac17b9",
+    "name": "Gandevi",
+    "code": "GND",
+    "address": "",
+    "created_at": "2026-04-20T12:00:42.816584+00:00",
+    "allow_login_when_inactive": true,
+    "city": "Gandevi",
+    "is_active": true,
+    "assigned_admin_id": "e2205a9c-9a5e-40f6-bee4-c3c248304377"
+  },
+  {
+    "id": "effc7c56-6e4c-4e3e-a6e9-043e6df269f8",
+    "name": "Amalsad",
+    "code": "AMD",
+    "city": "Amalsad",
+    "address": null,
+    "assigned_admin_id": null,
+    "is_active": true,
+    "allow_login_when_inactive": true,
+    "created_at": "2026-04-21T12:46:57.248410+00:00"
+  },
+  {
+    "id": "0bead9b2-c1bb-40f7-8dc3-7d23d12b0e57",
+    "name": "Vansda",
+    "code": "VNS",
+    "city": "Vansda",
+    "address": null,
+    "assigned_admin_id": null,
+    "is_active": true,
+    "allow_login_when_inactive": true,
+    "created_at": "2026-04-21T12:46:57.251916+00:00"
+  }
+]

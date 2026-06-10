@@ -1,0 +1,10 @@
+[
+  {
+    "id": "production_mode",
+    "enabled": true,
+    "purged_at": "2026-05-12T05:11:40.396338+00:00",
+    "purged_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "purged_by_name": "Super Admin",
+    "kept_users": true
+  }
+]

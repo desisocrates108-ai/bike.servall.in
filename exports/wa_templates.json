@@ -1,0 +1,117 @@
+[
+  {
+    "id": "d2a44c15-6a31-49ce-859d-dbe61d5aecf1",
+    "name": "inquiry_welcome",
+    "category": "inquiry",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}! Thanks for your interest in {{vehicle}} at {{branch}}. I'm {{sales_exec}} — reply with any questions, or drop by the showroom anytime.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.643745+00:00",
+    "updated_at": "2026-04-21T05:23:26.643755+00:00"
+  },
+  {
+    "id": "17c0c10f-55e2-4797-bafa-68ef321c5f84",
+    "name": "followup_reminder",
+    "category": "followup",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}, checking in on your interest in {{vehicle}}. Would you like to schedule a test ride?",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.644596+00:00",
+    "updated_at": "2026-04-21T05:23:26.644601+00:00"
+  },
+  {
+    "id": "dae38628-c9fc-4840-b4a9-68139c0959bc",
+    "name": "deal_offer",
+    "category": "deal",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}! Here's your offer for {{vehicle}} — final price Rs.{{deal_amount}}, discount Rs.{{discount}}. Let me know if you'd like to proceed.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.645161+00:00",
+    "updated_at": "2026-04-21T05:23:26.645164+00:00"
+  },
+  {
+    "id": "bf2e5974-2524-4e88-bbd9-05e94198e06d",
+    "name": "booking_confirm",
+    "category": "booking",
+    "message_type": "text",
+    "body": "Your booking for {{vehicle}} is confirmed at {{branch}}! Our team will keep you posted on delivery.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.645651+00:00",
+    "updated_at": "2026-04-21T05:23:26.645655+00:00"
+  },
+  {
+    "id": "69b24dc6-9b1c-40bc-8d83-3aed9c28a51b",
+    "name": "delivery_thankyou",
+    "category": "delivery",
+    "message_type": "text",
+    "body": "Congratulations {{customer_name}}! Your {{vehicle}} is delivered. Enjoy the ride and reach out anytime.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.646122+00:00",
+    "updated_at": "2026-04-21T05:23:26.646126+00:00"
+  },
+  {
+    "id": "7082927d-8d36-48f0-a00d-21d0df2497e9",
+    "name": "feedback_5d",
+    "category": "feedback",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}! How has your {{vehicle}} been so far? We'd love your feedback.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.646578+00:00",
+    "updated_at": "2026-04-21T05:23:26.646580+00:00"
+  },
+  {
+    "id": "1050333f-61b1-4eff-9540-fcc918d3a1ea",
+    "name": "rc_reminder_45d",
+    "category": "reminder",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}, your RC for the {{vehicle}} should be ready. Please visit {{branch}} to collect.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.647098+00:00",
+    "updated_at": "2026-04-21T05:23:26.647100+00:00"
+  },
+  {
+    "id": "a28c541b-dd8d-486e-826e-bb29a77729ca",
+    "name": "lost_reengage",
+    "category": "reengage",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}, still thinking about {{vehicle}}? We have a new offer that might change your mind. Reply YES to know more.",
+    "media_url": null,
+    "active": true,
+    "created_at": "2026-04-21T05:23:26.647546+00:00",
+    "updated_at": "2026-04-21T05:23:26.647549+00:00"
+  },
+  {
+    "id": "54448a8c-bc15-48a7-8e0c-72280ad6afba",
+    "name": "Inquiry — send catalog",
+    "category": "inquiry",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}, thanks for your interest at Servall! View our catalog: https://servall.com/catalog",
+    "active": true,
+    "created_at": "2026-04-28T09:03:23.642995+00:00"
+  },
+  {
+    "id": "d9b01654-d2d4-44ef-bdc8-2184abe8e026",
+    "name": "Delivery — thank you",
+    "category": "delivery",
+    "message_type": "text",
+    "body": "Congratulations {{customer_name}}! Your vehicle has been delivered. Thank you for choosing Servall — safe & happy rides! 🏍️",
+    "active": true,
+    "created_at": "2026-04-28T09:03:23.643599+00:00"
+  },
+  {
+    "id": "7bb8bd36-971b-45ae-bbb4-587db0db9f4e",
+    "name": "Feedback — request",
+    "category": "feedback",
+    "message_type": "text",
+    "body": "Hi {{customer_name}}, we'd love your feedback on your recent purchase. Reply here or visit: https://servall.com/feedback",
+    "active": true,
+    "created_at": "2026-04-28T09:03:23.644052+00:00"
+  }
+]

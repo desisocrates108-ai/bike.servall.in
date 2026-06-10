@@ -1,0 +1,149 @@
+[
+  {
+    "id": "428aa409-53ea-4340-b3b3-b9ccad952eb7",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Lead Created",
+    "meta": {
+      "source": "Tele-in"
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:35:59.123414+00:00"
+  },
+  {
+    "id": "8cf2e4f2-fa46-48c1-adf5-21a83eec1287",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Lead Assigned",
+    "meta": {
+      "assigned_to": "fa109e24-e3b7-43e7-839c-e26217a98ae2"
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:35:59.128055+00:00"
+  },
+  {
+    "id": "67a762d5-5d6f-40eb-adc6-5e29ed2a4673",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Lead Updated",
+    "meta": {
+      "fields": [
+        "deal",
+        "payment_mode",
+        "updated_at"
+      ]
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:36:11.833752+00:00"
+  },
+  {
+    "id": "48ebcc54-4d8f-40bf-a416-ce452b98fa22",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Lead Updated",
+    "meta": {
+      "fields": [
+        "deal",
+        "payment_mode",
+        "updated_at"
+      ]
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:36:24.845557+00:00"
+  },
+  {
+    "id": "87fb66bf-fc76-409b-a23b-370b96cbad22",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Stage Changed",
+    "meta": {
+      "from": "Inquiry",
+      "to": "Hold",
+      "via": "booking_created"
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:37:49.418491+00:00"
+  },
+  {
+    "id": "61e28caf-a247-46e9-bb87-2c72d8dab040",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Booking Created",
+    "meta": {
+      "booking_amount": 5000.0,
+      "payment_type": "Token",
+      "chassis_number": null,
+      "expected_delivery_date": "2026-06-09"
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:37:49.418803+00:00"
+  },
+  {
+    "id": "9de67ec6-0b53-4f99-a981-1066e3c2f9de",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Payment Added",
+    "meta": {
+      "amount": 5000.0,
+      "mode": "Cash",
+      "total_paid": 5000.0
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:38:27.134471+00:00"
+  },
+  {
+    "id": "1e28597a-1fd3-457e-9ee0-580df1958726",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Booking Confirmed",
+    "meta": {
+      "total_paid": 5000.0,
+      "booking_amount": 5000.0
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:38:29.993943+00:00"
+  },
+  {
+    "id": "9f9c9059-34bc-4609-b35a-f0ac378f0d0b",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Follow-up Added",
+    "meta": {
+      "type": "Call",
+      "scheduled_date": "2026-06-09",
+      "call_status": null,
+      "response": null,
+      "outcome": null
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:41:07.439563+00:00"
+  },
+  {
+    "id": "ba994f95-686d-479c-a94e-0284571122ff",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Follow-up Added",
+    "meta": {
+      "type": "Call",
+      "scheduled_date": "2026-06-09",
+      "call_status": "Connected",
+      "response": "Interested",
+      "outcome": "Progressed"
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:42:08.260848+00:00"
+  },
+  {
+    "id": "5e4e0c7b-a96e-42e7-bd89-59c31f9f612e",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "event": "Stage Changed",
+    "meta": {
+      "from": "Hold",
+      "to": "Booking",
+      "lost_reason": null
+    },
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "created_at": "2026-06-09T13:42:13.863797+00:00"
+  }
+]

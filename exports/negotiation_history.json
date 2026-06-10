@@ -1,0 +1,30 @@
+[
+  {
+    "id": "cf07661f-635e-413d-8b29-0696bd438d78",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "changed_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "changed_by_name": "Super Admin",
+    "changes": {
+      "ex_showroom_price": {
+        "from": null,
+        "to": 55000.0
+      }
+    },
+    "note": null,
+    "created_at": "2026-06-09T13:36:11.829308+00:00"
+  },
+  {
+    "id": "aba36fd9-cf0a-4d03-84be-376eff3c878c",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "changed_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "changed_by_name": "Super Admin",
+    "changes": {
+      "final_deal_price": {
+        "from": null,
+        "to": 48000.0
+      }
+    },
+    "note": null,
+    "created_at": "2026-06-09T13:36:24.844488+00:00"
+  }
+]

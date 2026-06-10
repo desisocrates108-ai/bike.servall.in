@@ -1,0 +1,58 @@
+[
+  {
+    "customer_name": "ghhmghmhf",
+    "phone": "hmhmfgm",
+    "alt_phone": "fmxfm",
+    "birthdate": "2026-06-09",
+    "address": "mfhxmhfx,",
+    "city": "hx,,,,hxf",
+    "source": "Tele-in",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "priority": "Hot",
+    "assigned_to": "fa109e24-e3b7-43e7-839c-e26217a98ae2",
+    "brand_id": "1d8b1f53-96e3-4028-bb1a-d7ee3b99f26a",
+    "model_id": "01a148ed-af46-411f-a7f4-a77d833dffcf",
+    "variant_id": "d07039ac-f492-4b2a-98e7-2cbab2f7dab0",
+    "color_id": "c2583519-09a1-4f97-a34d-c5876e459a88",
+    "vehicle_type": "Bike",
+    "test_ride_done": true,
+    "purchase_type": "New Purchase",
+    "customer_type": "Instant Buyer",
+    "exchange": null,
+    "deal": {
+      "customer_expected_price": 50000.0,
+      "offered_price": 50000.0,
+      "discount": 2000.0,
+      "interest_level": "Hot",
+      "ex_showroom_price": 55000.0,
+      "final_deal_price": 48000.0,
+      "deal_status": "Converted"
+    },
+    "payment_mode": "Cash",
+    "finance": null,
+    "next_followup_date": "2026-06-09",
+    "next_followup_type": "Call",
+    "notes": null,
+    "id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "stage": "Booking",
+    "created_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "created_at": "2026-06-09T13:35:59.119516+00:00",
+    "updated_at": "2026-06-09T13:42:13.863226+00:00",
+    "followup_count": 2,
+    "documents": [],
+    "lost_reason": null,
+    "lost_reason_text": null,
+    "identity_docs": {
+      "aadhaar": [
+        "25092a17-2035-4a6f-b747-da54d0926c02"
+      ],
+      "aadhaar_back": [
+        "a8b36185-20de-4279-84c2-56c2f2e144ea"
+      ]
+    },
+    "at_risk": false,
+    "last_followup_at": "2026-06-09T13:42:08.259833+00:00",
+    "missed_followups": 0,
+    "next_followup_time": null
+  }
+]

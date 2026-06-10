@@ -1,0 +1,122 @@
+[
+  {
+    "id": "28f91802-e5ad-4460-ac60-c7c8c0ac816c",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "login",
+    "entity_type": "user",
+    "entity_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "branch_id": null,
+    "status": "success",
+    "meta": {},
+    "created_at": "2026-06-09T13:34:49.474749+00:00"
+  },
+  {
+    "id": "1adee3be-3b88-4c48-8fac-80165561cbe7",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "lead_created",
+    "entity_type": "lead",
+    "entity_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "status": "success",
+    "meta": {
+      "source": "Tele-in",
+      "priority": "Warm"
+    },
+    "created_at": "2026-06-09T13:35:59.143263+00:00"
+  },
+  {
+    "id": "df3b9ca2-636f-4b69-b3d7-1caf6383b21e",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "lead_updated",
+    "entity_type": "lead",
+    "entity_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "status": "success",
+    "meta": {
+      "fields": [
+        "deal",
+        "payment_mode",
+        "updated_at"
+      ]
+    },
+    "created_at": "2026-06-09T13:36:11.834407+00:00"
+  },
+  {
+    "id": "ffa99dab-86d7-4a10-9666-7e282d37bf0e",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "lead_updated",
+    "entity_type": "lead",
+    "entity_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "status": "success",
+    "meta": {
+      "fields": [
+        "deal",
+        "payment_mode",
+        "updated_at"
+      ]
+    },
+    "created_at": "2026-06-09T13:36:24.845871+00:00"
+  },
+  {
+    "id": "5cf19133-8629-4d5c-8ea9-17767ff66851",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "followup_created",
+    "entity_type": "followup",
+    "entity_id": "6cd167ed-27c4-4436-bcf5-d43ec2fbf31d",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "status": "success",
+    "meta": {
+      "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+      "type": "Call",
+      "scheduled_date": "2026-06-09",
+      "outcome": null
+    },
+    "created_at": "2026-06-09T13:41:07.440007+00:00"
+  },
+  {
+    "id": "78b8d572-af99-44d9-a01c-3048ad0162bd",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "followup_created",
+    "entity_type": "followup",
+    "entity_id": "630d8e43-9518-461a-8ff0-9aff0b5fea05",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "status": "success",
+    "meta": {
+      "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+      "type": "Call",
+      "scheduled_date": "2026-06-09",
+      "outcome": "Progressed"
+    },
+    "created_at": "2026-06-09T13:42:08.261307+00:00"
+  },
+  {
+    "id": "32ba6f8a-16c3-45f8-8173-21343aef9ed2",
+    "actor_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "actor_name": "Super Admin",
+    "actor_role": "super_admin",
+    "action": "stage_changed",
+    "entity_type": "lead",
+    "entity_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "status": "success",
+    "meta": {
+      "from": "Hold",
+      "to": "Booking",
+      "lost_reason": null
+    },
+    "created_at": "2026-06-09T13:42:13.865126+00:00"
+  }
+]

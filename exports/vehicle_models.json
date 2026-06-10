@@ -1,0 +1,56 @@
+[
+  {
+    "id": "2940b135-f871-4e94-8d22-835ca45bd1eb",
+    "name": "Activa 6G",
+    "brand_id": "8d94579d-62cc-4a25-88b0-8e75a1f4fa60",
+    "created_at": "2026-04-20T12:00:42.827024+00:00"
+  },
+  {
+    "id": "f2f67e63-1421-485a-998e-e08e48301493",
+    "name": "Shine",
+    "brand_id": "8d94579d-62cc-4a25-88b0-8e75a1f4fa60",
+    "created_at": "2026-04-20T12:00:42.845574+00:00"
+  },
+  {
+    "id": "c57fc5a9-ff02-4c33-82db-3a2e7bc30b37",
+    "name": "Dio",
+    "brand_id": "8d94579d-62cc-4a25-88b0-8e75a1f4fa60",
+    "created_at": "2026-04-20T12:00:42.847129+00:00"
+  },
+  {
+    "id": "6a18f555-7090-433e-ba40-e6cd08fbe005",
+    "name": "Splendor Plus",
+    "brand_id": "1d8b1f53-96e3-4028-bb1a-d7ee3b99f26a",
+    "created_at": "2026-04-20T12:00:42.848996+00:00"
+  },
+  {
+    "id": "01a148ed-af46-411f-a7f4-a77d833dffcf",
+    "name": "HF Deluxe",
+    "brand_id": "1d8b1f53-96e3-4028-bb1a-d7ee3b99f26a",
+    "created_at": "2026-04-20T12:00:42.850941+00:00"
+  },
+  {
+    "id": "5bad7c86-050c-4a4d-9bb5-bf2f4dd01976",
+    "name": "Jupiter",
+    "brand_id": "5e04f87a-c6fc-4f89-839b-873f026f4821",
+    "created_at": "2026-04-20T12:00:42.897073+00:00"
+  },
+  {
+    "id": "cb6796b7-7b7b-45aa-95a4-573e6d946feb",
+    "name": "Apache RTR 160",
+    "brand_id": "5e04f87a-c6fc-4f89-839b-873f026f4821",
+    "created_at": "2026-04-20T12:00:42.898667+00:00"
+  },
+  {
+    "id": "81ef0e4c-f304-4b88-8067-4aa4f3a7f9cb",
+    "name": "Access 125",
+    "brand_id": "a46849ea-c710-40a5-b3ba-54273d2c0959",
+    "created_at": "2026-04-20T12:00:42.900283+00:00"
+  },
+  {
+    "id": "c46fd115-b307-46b4-8e36-c0a84fa965fb",
+    "name": "Burgman Street",
+    "brand_id": "a46849ea-c710-40a5-b3ba-54273d2c0959",
+    "created_at": "2026-04-20T12:00:42.901506+00:00"
+  }
+]

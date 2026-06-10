@@ -1,0 +1,32 @@
+{
+  "exported_at": "2026-06-10T05:10:20.647294",
+  "db": "twowheeler_crm",
+  "counts": {
+    "users": 3,
+    "branches": 5,
+    "leads": 1,
+    "followups": 2,
+    "bookings": 1,
+    "deliveries": 0,
+    "allotments": 0,
+    "payments": 1,
+    "documents": 0,
+    "files": 2,
+    "exchange_valuations": 0,
+    "negotiation_history": 2,
+    "timeline": 11,
+    "wa_messages": 1,
+    "wa_templates": 11,
+    "campaigns": 0,
+    "automation_rules": 3,
+    "finance_cases": 0,
+    "inventory": 0,
+    "brands": 4,
+    "vehicle_models": 9,
+    "variants": 24,
+    "colors": 5,
+    "audit_logs": 7,
+    "reminders": 0,
+    "system_flags": 1
+  }
+}

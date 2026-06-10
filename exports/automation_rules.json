@@ -1,0 +1,32 @@
+[
+  {
+    "id": "9b54e85f-687f-4bef-a6e4-ca568e95254a",
+    "name": "Auto-send catalog on inquiry",
+    "event": "inquiry_created",
+    "conditions": {},
+    "template_id": "54448a8c-bc15-48a7-8e0c-72280ad6afba",
+    "delay_minutes": 0,
+    "active": true,
+    "created_at": "2026-05-13T09:27:47.144888+00:00"
+  },
+  {
+    "id": "c6ff1459-86b5-4933-a07d-56be26f71dd9",
+    "name": "Thank you on delivery",
+    "event": "delivery_completed",
+    "conditions": {},
+    "template_id": "d9b01654-d2d4-44ef-bdc8-2184abe8e026",
+    "delay_minutes": 0,
+    "active": true,
+    "created_at": "2026-05-13T09:27:47.149640+00:00"
+  },
+  {
+    "id": "fc7698b0-8db7-4266-9449-990a16033dd7",
+    "name": "Feedback reminder",
+    "event": "feedback_reminder",
+    "conditions": {},
+    "template_id": "7bb8bd36-971b-45ae-bbb4-587db0db9f4e",
+    "delay_minutes": 0,
+    "active": true,
+    "created_at": "2026-05-13T09:27:47.150393+00:00"
+  }
+]

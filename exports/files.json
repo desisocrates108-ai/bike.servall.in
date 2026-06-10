@@ -1,0 +1,32 @@
+[
+  {
+    "id": "25092a17-2035-4a6f-b747-da54d0926c02",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "storage_path": "twowheeler-crm/leads/e2600afa-0da5-47f1-8053-cc84078f943f/docs/aadhaar/47b9d914-cc04-453a-bacf-169b36c650fa.jpeg",
+    "original_filename": "WhatsApp Image 2026-05-28 at 4.44.31 PM.jpeg",
+    "content_type": "image/jpeg",
+    "size": 220590,
+    "doc_type": "Lead Aadhaar",
+    "side": "identity",
+    "bucket": "aadhaar",
+    "uploaded_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "uploaded_by_name": "Super Admin",
+    "is_deleted": false,
+    "created_at": "2026-06-09T13:40:24.486319+00:00"
+  },
+  {
+    "id": "a8b36185-20de-4279-84c2-56c2f2e144ea",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "storage_path": "twowheeler-crm/leads/e2600afa-0da5-47f1-8053-cc84078f943f/docs/aadhaar_back/1f161863-5935-4a21-9d22-ea87be628dfd.jpeg",
+    "original_filename": "WhatsApp Image 2026-05-28 at 4.44.31 PM.jpeg",
+    "content_type": "image/jpeg",
+    "size": 220590,
+    "doc_type": "Lead Aadhaar Back",
+    "side": "identity",
+    "bucket": "aadhaar_back",
+    "uploaded_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "uploaded_by_name": "Super Admin",
+    "is_deleted": false,
+    "created_at": "2026-06-09T13:40:28.939741+00:00"
+  }
+]

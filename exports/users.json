@@ -1,0 +1,41 @@
+[
+  {
+    "id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "email": "superadmin@dealer.com",
+    "name": "Super Admin",
+    "role": "super_admin",
+    "branch_id": null,
+    "is_active": true,
+    "created_at": "2026-04-20T12:00:43.436614+00:00",
+    "joining_date": null,
+    "permissions": {},
+    "phone": "9000000000",
+    "reporting_manager_id": null
+  },
+  {
+    "id": "d6174a96-cd9a-4157-9a7f-4837d0d1056c",
+    "email": "sup@dealer.com",
+    "name": "vimal",
+    "phone": "3216549877",
+    "role": "admin",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "reporting_manager_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "joining_date": "2026-04-14",
+    "permissions": {},
+    "is_active": true,
+    "created_at": "2026-04-28T09:03:50.982096+00:00"
+  },
+  {
+    "id": "fa109e24-e3b7-43e7-839c-e26217a98ae2",
+    "email": "nancy@sales.com",
+    "name": "Nancy  tandel",
+    "phone": "9313646778",
+    "role": "sales_executive",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "reporting_manager_id": "5170b125-db51-4731-a1e6-658facbecd11",
+    "joining_date": "2026-04-28",
+    "permissions": {},
+    "is_active": true,
+    "created_at": "2026-04-28T09:49:20.019819+00:00"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "0829dfe9-b119-4223-a566-8a65f48f779b",
+    "booking_id": "c3ccb13f-f3bf-451f-956b-b3bb2c2dd2a5",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "amount": 5000.0,
+    "date": "2026-06-09",
+    "mode": "Cash",
+    "payment_type": "Final",
+    "notes": null,
+    "created_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "created_by_name": "Super Admin",
+    "created_at": "2026-06-09T13:38:27.128621+00:00"
+  }
+]

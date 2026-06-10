@@ -1,0 +1,24 @@
+[
+  {
+    "id": "11b9a7f5-9db8-4745-9f58-95fcd0049a7a",
+    "lead_id": "e2600afa-0da5-47f1-8053-cc84078f943f",
+    "branch_id": "a2bc334c-5ffd-4dcf-b925-70e441c73b9e",
+    "phone": "hmhmfgm",
+    "template_id": "54448a8c-bc15-48a7-8e0c-72280ad6afba",
+    "message_type": "text",
+    "content": "Hi ghhmghmhf, thanks for your interest at Servall! View our catalog: https://servall.com/catalog",
+    "media_url": null,
+    "direction": "outbound",
+    "status": "SENT",
+    "trigger_source": "inquiry_created",
+    "campaign_id": null,
+    "retry_count": 0,
+    "reply_tag": null,
+    "scheduled_at": null,
+    "created_by": "5170b125-db51-4731-a1e6-658facbecd11",
+    "created_by_name": "Super Admin",
+    "created_at": "2026-06-09T13:35:59.136590+00:00",
+    "updated_at": "2026-06-09T13:35:59.136594+00:00",
+    "sent_at": "2026-06-09T13:35:59.142577+00:00"
+  }
+]
