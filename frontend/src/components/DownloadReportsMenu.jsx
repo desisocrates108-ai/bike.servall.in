@@ -15,7 +15,7 @@ import {
  *  - branches: array of branch objects
  *  - branchFilter: current branch_id filter (or empty)
  */
-export default function DownloadReportsMenu({ leads = [], users = [], branches = [], branchFilter = "" }) {
+export default function DownloadReportsMenu({ leads = [], users = [], branches = [], brands = [], models = [], branchFilter = "" }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(null); // `${reportId}-${format}`
   const ref = useRef(null);
@@ -49,6 +49,8 @@ export default function DownloadReportsMenu({ leads = [], users = [], branches =
         leads,
         users,
         branches,
+        brands,
+        models,
         bookings: bookings || [],
       });
       if (format === "xlsx") exportToExcel(data);

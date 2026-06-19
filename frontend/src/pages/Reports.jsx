@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import PageHeader from "../components/PageHeader";
 import { FunnelChart, BarChart, DonutBreakdown } from "../components/Charts";
+import DownloadReportsMenu from "../components/DownloadReportsMenu";
 import { TrendingUp, CheckCircle2, XCircle, Users2, Building2 } from "lucide-react";
 
 const CONVERTED_STAGES = ["Delivery", "Registration", "Feedback"];
@@ -175,17 +176,27 @@ export default function Reports() {
         subtitle={`${totalLeads} leads · ${convPct}% converted`}
         sticky
         right={
-          isCEO && branches.length > 0 ? (
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className="h-10 rounded-sm border border-zinc-200 bg-white px-3 text-sm font-medium focus:outline-none focus:border-brand"
-              data-testid="reports-branch-filter"
-            >
-              <option value="">{t("dash.all_branches", "All branches")}</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          ) : null
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {isCEO && branches.length > 0 ? (
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="h-10 rounded-sm border border-zinc-200 bg-white px-3 text-sm font-medium focus:outline-none focus:border-brand"
+                data-testid="reports-branch-filter"
+              >
+                <option value="">{t("dash.all_branches", "All branches")}</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            ) : null}
+            <DownloadReportsMenu
+              leads={leads}
+              users={users}
+              branches={branches}
+              brands={brands}
+              models={models}
+              branchFilter={branchFilter}
+            />
+          </div>
         }
       />
       <div className="p-3 sm:p-6 max-w-[1400px] mx-auto w-full">

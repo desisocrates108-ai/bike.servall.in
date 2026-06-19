@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="6" time="4.693" timestamp="2026-06-19T12:46:55.518800+00:00" hostname="agent-env-6cab0b4b-3238-40ec-8230-9972d2eea59c"><testcase classname="backend.tests.test_iter25_reports_allotment" name="test_leads_created_at_present_and_sorted_newest_first" time="0.466" /><testcase classname="backend.tests.test_iter25_reports_allotment" name="test_bookings_list_shape" time="0.108" /><testcase classname="backend.tests.test_iter25_reports_allotment" name="test_allotment_optional_fields[empty-payload0]" time="1.019"><failure message="AssertionError: variant=empty payload={} -&gt; 500 Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code">backend/tests/test_iter25_reports_allotment.py:147: in test_allotment_optional_fields
+    assert r.status_code == 200, f"variant={label} payload={payload} -&gt; {r.status_code} {r.text}"
+E   AssertionError: variant=empty payload={} -&gt; 500 Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter25_reports_allotment" name="test_allotment_optional_fields[chassis_only-payload1]" time="1.009"><failure message="AssertionError: variant=chassis_only payload={'chassis_number': 'CHTEST123'} -&gt; 500 Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code">backend/tests/test_iter25_reports_allotment.py:147: in test_allotment_optional_fields
+    assert r.status_code == 200, f"variant={label} payload={payload} -&gt; {r.status_code} {r.text}"
+E   AssertionError: variant=chassis_only payload={'chassis_number': 'CHTEST123'} -&gt; 500 Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter25_reports_allotment" name="test_allotment_optional_fields[engine_only-payload2]" time="0.994"><failure message="AssertionError: variant=engine_only payload={'engine_number': 'ENGTEST456'} -&gt; 500 Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code">backend/tests/test_iter25_reports_allotment.py:147: in test_allotment_optional_fields
+    assert r.status_code == 200, f"variant={label} payload={payload} -&gt; {r.status_code} {r.text}"
+E   AssertionError: variant=engine_only payload={'engine_number': 'ENGTEST456'} -&gt; 500 Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter25_reports_allotment" name="test_allotment_optional_fields[both-payload3]" time="1.001"><failure message="AssertionError: variant=both payload={'chassis_number': 'CHTEST789', 'engine_number': 'ENGTEST789'} -&gt; 500 Internal Server Error&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code">backend/tests/test_iter25_reports_allotment.py:147: in test_allotment_optional_fields
+    assert r.status_code == 200, f"variant={label} payload={payload} -&gt; {r.status_code} {r.text}"
+E   AssertionError: variant=both payload={'chassis_number': 'CHTEST789', 'engine_number': 'ENGTEST789'} -&gt; 500 Internal Server Error
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</failure></testcase></testsuite></testsuites>

@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { priorityClass, priorityStrip, stageClass } from "../lib/labels";
 import { Search, Plus, Filter as FilterIcon, ChevronRight } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import { formatDate as formatDDMMYYYY } from "../utils/exportReports";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import {
@@ -229,6 +230,11 @@ export default function Leads() {
                 <div className="text-xs text-zinc-500 mt-1.5 flex flex-wrap gap-x-3">
                   {userMap[l.assigned_to]?.name && <span>{userMap[l.assigned_to].name}</span>}
                   {l.next_followup_date && <span className="font-mono">→ {l.next_followup_date}</span>}
+                  {l.created_at && (
+                    <span className="font-mono text-zinc-400" data-testid={`lead-created-${l.id}`}>
+                      Created: {formatDDMMYYYY(l.created_at)}
+                    </span>
+                  )}
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-zinc-400 mt-2 flex-shrink-0" />
@@ -251,15 +257,16 @@ export default function Leads() {
                 <th>{t("lead.assigned_to")}</th>
                 <th>{t("lead.branch")}</th>
                 <th>{t("lead.followups")}</th>
+                <th>Created Date</th>
                 <th>{t("lead.priority")}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={9} className="py-8 text-center text-zinc-400">{t("common.loading")}</td></tr>
+                <tr><td colSpan={10} className="py-8 text-center text-zinc-400">{t("common.loading")}</td></tr>
               )}
               {!loading && leads.length === 0 && (
-                <tr><td colSpan={9} className="py-12 text-center text-zinc-400">No leads match the filters.</td></tr>
+                <tr><td colSpan={10} className="py-12 text-center text-zinc-400">No leads match the filters.</td></tr>
               )}
               {leads.map((l) => (
                 <tr
@@ -280,6 +287,7 @@ export default function Leads() {
                   <td className="text-zinc-600">{userMap[l.assigned_to]?.name || "—"}</td>
                   <td className="text-zinc-600">{branchMap[l.branch_id]?.name || "—"}</td>
                   <td className="font-mono text-sm text-zinc-600">{l.next_followup_date || "—"}</td>
+                  <td className="font-mono text-sm text-zinc-600" data-testid={`lead-created-desk-${l.id}`}>{l.created_at ? formatDDMMYYYY(l.created_at) : "—"}</td>
                   <td>
                     <span className={`inline-block px-2 py-0.5 rounded-sm text-[11px] font-bold uppercase tracking-wider border ${priorityClass(l.priority)}`}>
                       {l.priority}

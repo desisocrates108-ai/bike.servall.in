@@ -1,0 +1,65 @@
+{
+  "summary": "Iter 25 testing (Reports Download + Leads Created Date + Optional Chassis/Engine Allotment) — Frontend mostly PASS, Backend allotment endpoint BROKEN with two critical bugs. Required a `supervisorctl restart frontend` mid-run because the running webpack bundle had REACT_APP_BACKEND_URL=undefined (POSTed to /undefined/api/auth/login) — after restart it picked up frontend/.env correctly.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/bookings/{bid}/allotment",
+        "issue": "KeyError: 'Delivered' at backend/server.py:2947. STAGES list = ['Inquiry','Follow-up','Hold','Booking','Delivery','Allotment','Feedback','Lost'] does NOT contain 'Delivered', but create_allotment uses `stage_order['Delivered']` and sets lead.stage = 'Delivered'. Every allotment POST returns 500. Verified by 4 parametrized tests (empty / chassis_only / engine_only / both) and backend traceback in supervisor logs.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/bookings/{bid}/allotment",
+        "issue": "MongoDB DuplicateKeyError E11000 on `allotments.chassis_number_1` unique index when chassis_number is null. Because chassis is now optional, multiple allotments with null chassis collide on the unique index. Need partial index: `{chassis_number: 1}` with `partialFilterExpression: {chassis_number: {$type: 'string'}}` (or sparse: true), and a one-off migration to recreate the index on existing DB.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/bookings",
+        "issue": "Response objects do NOT include an `allotment` field in the shape (keys observed: id, lead_id, branch_id, assigned_to, customer_name, booking_date, expected_delivery_date, brand_id, model_id, variant_id, color_id, final_deal_price, booking_amount, total_paid, pending_amount, payment_status, status, payment_type, inventory_id, chassis_number, finance_company, down_payment, emi, loan_status, exchange_final_value). Spec said list should include 'attached allotment' but it is absent. Booking Report builder reads `b.allotment?.chassis_number` so it will always be empty until backend attaches allotment."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Vehicle Allotment dialog save",
+        "issue": "Could not exercise end-to-end because backend POST /allotment 500s (see backend critical bugs). Frontend dialog UI itself was not opened in this run due to backend block; main agent should retest UI after backend fix.",
+        "affected_selectors": ["[data-testid=assign-vehicle-btn]", "[data-testid=save-allotment-btn]", "[data-testid=allot-chassis]", "[data-testid=allot-engine]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter25_reports_allotment.py",
+    "/app/test_reports/pytest/iter25_results.xml"
+  ],
+  "action_items": [
+    "FIX backend/server.py:2947 — replace stage_order['Delivered'] with stage_order['Allotment'] (or 'Delivery') and set lead stage to a value that exists in STAGES. Pick the intended target — likely 'Allotment'.",
+    "FIX MongoDB unique index on allotments.chassis_number — convert to partial/sparse index so multiple null chassis values are allowed. Add a startup migration to drop the old `chassis_number_1` index and recreate as partial.",
+    "Ensure GET /api/bookings attaches `allotment` sub-document for each booking (or null) — DownloadReportsMenu booking report depends on it.",
+    "Cleanup TEST_Iter25_ leads created by the test seed loop (visible in Funnel): they piled up because each parametrized variant created a lead+booking but allotment 500'd, so they stay in 'Booking'/'Hold' stages. Either delete via super_admin /api/leads/{id} DELETE or via Mongo.",
+    "Re-run frontend allotment dialog test after backend fix to verify chassis label has no asterisk and empty Save succeeds."
+  ],
+  "critical_code_review_comments": [
+    "STAGES constant in server.py uses 'Delivery'/'Allotment' but several stale code paths and the Reports builder (CONVERTED_STAGES = ['Delivered','Registered','Feedback','Delivery','Registration']) reference 'Delivered'/'Registered'/'Registration' which are not in STAGES. There is a stage-name drift between frontend exportReports.js and backend STAGES — converted-count and lost-count in Performance Report may be wrong. Unify the stage vocabulary.",
+    "The frontend webpack dev server did not pick up frontend/.env until a manual `supervisorctl restart frontend`. Add a guard or doc note: any change to frontend/.env requires service restart. Consider failing fast if BACKEND_URL is undefined (api.js currently just builds `undefined/api`).",
+    "Mongo unique index on optional fields should always be partial/sparse — chassis_number on allotments is a clear case. Same risk likely exists for `engine_number` if there's a unique index on it.",
+    "DownloadReportsMenu fetches /bookings only when report.id === 'booking'. For consistency and to avoid empty Booking_Report rows, it should pre-fetch bookings on mount and show a count to the user."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter25_reports_allotment.py",
+    "/app/test_reports/iteration_25.json"
+  ],
+  "success_rate": {
+    "backend": "33% (2/6 pass — both leads-sort and bookings-list pass; all 4 allotment-variant tests FAIL with 500)",
+    "frontend": "100% on the items we could test (login, leads created-date column, DD-MM-YYYY format, newest-first sort, Reports button + menu, 6 reports with xlsx+pdf, Excel + PDF download triggered, branch filter visible, mobile 'Created: DD-MM-YYYY' card, /dashboard /tasks /funnel smoke). Allotment dialog UI not exercised due to backend 500."
+  },
+  "test_credentials": "superadmin@dealer.com / super123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Test created 8 TEST_Iter25_* leads + bookings (visible in Sales Funnel). These remain in DB because the allotment step 500'd before any teardown. Main agent should clean them after backend fixes.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "After main agent fixes the two backend bugs (KeyError 'Delivered' on server.py:2947 + non-partial unique chassis_number index), re-run: `pytest backend/tests/test_iter25_reports_allotment.py -v`. All 4 parametrized allotment variants should return 200 with echoed chassis/engine values. Then in Playwright: login → navigate to a Confirmed booking's lead detail → click [data-testid=assign-vehicle-btn] → verify chassis label has NO asterisk → click [data-testid=save-allotment-btn] with both fields empty → assert no 'Chassis number is required' error and success toast appears. Also retest GET /api/bookings to confirm `allotment` field is now attached for bookings that have one.",
+  "rca_of_the_issue": "1) server.py uses 'Delivered' as a stage name in two places (line 2947 stage_order lookup; line 2949 update) but STAGES list (line 54-55) has 'Delivery' not 'Delivered'. The same drift exists in frontend's exportReports.js CONVERTED_STAGES. Likely a refactor that renamed Delivered→Delivery missed these lines. 2) The allotments.chassis_number_1 index was created when chassis was mandatory + unique. Now that it's optional, two nulls collide. Fix is to drop & recreate as partialFilterExpression. 3) Frontend webpack-dev-server cached the build with stale env (REACT_APP_BACKEND_URL=undefined) — root cause not deeply investigated but restart resolved it; suggests either supervisor started before .env was written, or some build artifact override."
+}

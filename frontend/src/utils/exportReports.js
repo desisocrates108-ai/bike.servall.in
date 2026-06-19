@@ -1,12 +1,18 @@
 // Reports export utility — supports Excel (.xlsx) and PDF
+// Date format: DD-MM-YYYY everywhere
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// Format date as DD-MM-YYYY
+// Format date as DD-MM-YYYY (accepts ISO date or YYYY-MM-DD strings)
 export function formatDate(d) {
   if (!d) return "";
   try {
+    // YYYY-MM-DD only → split directly to avoid TZ surprises
+    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const [y, m, day] = d.split("-");
+      return `${day}-${m}-${y}`;
+    }
     const dt = new Date(d);
     if (isNaN(dt.getTime())) return String(d).slice(0, 10);
     const day = String(dt.getDate()).padStart(2, "0");
@@ -25,7 +31,6 @@ function safeFileName(name) {
 
 // ------------- Excel ------------------
 export function exportToExcel({ title, sheets }) {
-  // sheets: [{ name, columns: [{header, key}], rows: [{...}] }]
   const wb = XLSX.utils.book_new();
   sheets.forEach((sheet) => {
     const headerRow = sheet.columns.map((c) => c.header);
@@ -37,11 +42,10 @@ export function exportToExcel({ title, sheets }) {
     );
     const aoa = [headerRow, ...data];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    // Auto column widths
-    ws["!cols"] = sheet.columns.map((c) => {
+    ws["!cols"] = sheet.columns.map((c, idx) => {
       const maxLen = Math.max(
         c.header.length,
-        ...data.map((row) => String(row[sheet.columns.indexOf(c)] || "").length)
+        ...data.map((row) => String(row[idx] || "").length)
       );
       return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
     });
@@ -56,7 +60,7 @@ export function exportToPDF({ title, sheets, orientation = "landscape" }) {
   const pageWidth = doc.internal.pageSize.getWidth();
 
   doc.setFontSize(16);
-  doc.text(title, pageWidth / 2, 36, { align: "center" });
+  doc.text(title.replace(/_/g, " "), pageWidth / 2, 36, { align: "center" });
   doc.setFontSize(10);
   doc.setTextColor(120);
   doc.text(`Generated: ${formatDate(new Date())}`, pageWidth / 2, 52, { align: "center" });
@@ -93,17 +97,25 @@ export function exportToPDF({ title, sheets, orientation = "landscape" }) {
 // Report builders — convert raw API data into sheet definitions
 // =====================================================================
 
-const CONVERTED_STAGES = ["Delivery", "Registration", "Feedback", "Converted"];
+const CONVERTED_STAGES = ["Delivered", "Registered", "Feedback", "Delivery", "Registration"];
+const LOST_STAGES = ["Lost"];
 
 function isConverted(l) {
   return CONVERTED_STAGES.includes(l.stage);
+}
+
+function vehicleLabel(l, brandMap, modelMap) {
+  const parts = [];
+  if (l.brand_id && brandMap?.[l.brand_id]) parts.push(brandMap[l.brand_id]);
+  if (l.model_id && modelMap?.[l.model_id]) parts.push(modelMap[l.model_id]);
+  return parts.join(" ");
 }
 
 // 1. Performance Report
 export function buildPerformanceReport({ leads, users, branches }) {
   const total = leads.length;
   const converted = leads.filter(isConverted).length;
-  const lost = leads.filter((l) => l.stage === "Lost").length;
+  const lost = leads.filter((l) => LOST_STAGES.includes(l.stage)).length;
   const conv = total ? ((converted / total) * 100).toFixed(1) + "%" : "0%";
 
   const summarySheet = {
@@ -121,17 +133,17 @@ export function buildPerformanceReport({ leads, users, branches }) {
   };
 
   // Source-wise
-  const sources = ["Walk-in", "Cold Calling", "Referral", "Tele-in", "Social Media", "WhatsApp"];
-  const srcRows = sources.map((src) => {
+  const sourceSet = new Set(leads.map((l) => l.source).filter(Boolean));
+  const srcRows = Array.from(sourceSet).map((src) => {
     const arr = leads.filter((l) => l.source === src);
-    const conv = arr.filter(isConverted).length;
-    const lost = arr.filter((l) => l.stage === "Lost").length;
+    const c = arr.filter(isConverted).length;
+    const ls = arr.filter((l) => LOST_STAGES.includes(l.stage)).length;
     return {
       source: src,
       total: arr.length,
-      converted: conv,
-      lost,
-      conv_pct: arr.length ? ((conv / arr.length) * 100).toFixed(1) + "%" : "0%",
+      converted: c,
+      lost: ls,
+      conv_pct: arr.length ? ((c / arr.length) * 100).toFixed(1) + "%" : "0%",
     };
   });
   const sourceSheet = {
@@ -157,14 +169,14 @@ export function buildPerformanceReport({ leads, users, branches }) {
   }
   const execRows = Array.from(execGroup.entries()).map(([uid, arr]) => {
     const u = userMap.get(uid);
-    const conv = arr.filter(isConverted).length;
-    const lost = arr.filter((l) => l.stage === "Lost").length;
+    const c = arr.filter(isConverted).length;
+    const ls = arr.filter((l) => LOST_STAGES.includes(l.stage)).length;
     return {
       executive: u ? u.name : uid,
       total: arr.length,
-      converted: conv,
-      lost,
-      conv_pct: arr.length ? ((conv / arr.length) * 100).toFixed(1) + "%" : "0%",
+      converted: c,
+      lost: ls,
+      conv_pct: arr.length ? ((c / arr.length) * 100).toFixed(1) + "%" : "0%",
     };
   });
   const execSheet = {
@@ -190,14 +202,14 @@ export function buildPerformanceReport({ leads, users, branches }) {
   }
   const branchRows = Array.from(branchGroup.entries()).map(([bid, arr]) => {
     const b = branchMap.get(bid);
-    const conv = arr.filter(isConverted).length;
-    const lost = arr.filter((l) => l.stage === "Lost").length;
+    const c = arr.filter(isConverted).length;
+    const ls = arr.filter((l) => LOST_STAGES.includes(l.stage)).length;
     return {
       branch: b ? b.name : bid,
       total: arr.length,
-      converted: conv,
-      lost,
-      conv_pct: arr.length ? ((conv / arr.length) * 100).toFixed(1) + "%" : "0%",
+      converted: c,
+      lost: ls,
+      conv_pct: arr.length ? ((c / arr.length) * 100).toFixed(1) + "%" : "0%",
     };
   });
   const branchSheet = {
@@ -219,21 +231,23 @@ export function buildPerformanceReport({ leads, users, branches }) {
 }
 
 // 2. Customer Details Report
-export function buildCustomerDetailsReport({ leads, users, branches }) {
+export function buildCustomerDetailsReport({ leads, users, branches, brands, models }) {
   const userMap = new Map((users || []).map((u) => [u.id, u]));
   const branchMap = new Map((branches || []).map((b) => [b.id, b]));
+  const brandMap = Object.fromEntries((brands || []).map((b) => [b.id, b.name]));
+  const modelMap = Object.fromEntries((models || []).map((m) => [m.id, m.name]));
   const rows = leads.map((l) => ({
     lead_id: l.id,
-    customer_name: l.name || "",
+    customer_name: l.customer_name || "",
     mobile: l.phone || "",
     source: l.source || "",
     stage: l.stage || "",
     assigned_to: userMap.get(l.assigned_to)?.name || "",
     branch: branchMap.get(l.branch_id)?.name || "",
     priority: l.priority || "",
-    follow_up_date: formatDate(l.next_follow_up_at),
+    follow_up_date: formatDate(l.next_followup_date),
     created_date: formatDate(l.created_at),
-    vehicle: l.vehicle_interest || l.vehicle_model || "",
+    vehicle: vehicleLabel(l, brandMap, modelMap),
     notes: l.notes || "",
     conversion_status: isConverted(l) ? "Converted" : l.stage === "Lost" ? "Lost" : "In Progress",
   }));
@@ -243,7 +257,6 @@ export function buildCustomerDetailsReport({ leads, users, branches }) {
       {
         name: "Customer Details",
         columns: [
-          { header: "Lead ID", key: "lead_id" },
           { header: "Customer Name", key: "customer_name" },
           { header: "Mobile Number", key: "mobile" },
           { header: "Source", key: "source" },
@@ -268,15 +281,14 @@ export function buildLeadsReport({ leads, users, branches }) {
   const userMap = new Map((users || []).map((u) => [u.id, u]));
   const branchMap = new Map((branches || []).map((b) => [b.id, b]));
   const rows = leads.map((l) => ({
-    lead_id: l.id,
-    customer_name: l.name || "",
+    customer_name: l.customer_name || "",
     phone: l.phone || "",
     source: l.source || "",
     stage: l.stage || "",
     assigned_to: userMap.get(l.assigned_to)?.name || "",
     branch: branchMap.get(l.branch_id)?.name || "",
     created_date: formatDate(l.created_at),
-    last_follow_up: formatDate(l.last_follow_up_at || l.next_follow_up_at),
+    last_follow_up: formatDate(l.last_followup_at || l.next_followup_date),
     priority: l.priority || "",
   }));
   return {
@@ -285,7 +297,6 @@ export function buildLeadsReport({ leads, users, branches }) {
       {
         name: "All Leads",
         columns: [
-          { header: "Lead ID", key: "lead_id" },
           { header: "Customer Name", key: "customer_name" },
           { header: "Phone", key: "phone" },
           { header: "Source", key: "source" },
@@ -307,13 +318,13 @@ export function buildLostLeadsReport({ leads, users }) {
   const userMap = new Map((users || []).map((u) => [u.id, u]));
   const lostLeads = leads.filter((l) => l.stage === "Lost");
   const rows = lostLeads.map((l) => ({
-    customer_name: l.name || "",
+    customer_name: l.customer_name || "",
     mobile: l.phone || "",
     source: l.source || "",
-    lost_reason: l.lost_reason || l.loss_reason || "",
+    lost_reason: l.lost_reason || l.lost_reason_text || "",
     assigned_to: userMap.get(l.assigned_to)?.name || "",
     created_date: formatDate(l.created_at),
-    lost_date: formatDate(l.lost_at || l.updated_at),
+    lost_date: formatDate(l.updated_at),
   }));
   return {
     title: "Lost_Leads_Report",
@@ -336,20 +347,24 @@ export function buildLostLeadsReport({ leads, users }) {
 }
 
 // 5. Converted / Booking Report
-export function buildBookingReport({ bookings, leads, users }) {
+export function buildBookingReport({ bookings, leads, users, brands, models }) {
   const userMap = new Map((users || []).map((u) => [u.id, u]));
   const leadMap = new Map((leads || []).map((l) => [l.id, l]));
+  const brandMap = Object.fromEntries((brands || []).map((b) => [b.id, b.name]));
+  const modelMap = Object.fromEntries((models || []).map((m) => [m.id, m.name]));
   const rows = (bookings || []).map((b) => {
     const lead = leadMap.get(b.lead_id) || {};
     return {
-      customer_name: lead.name || b.customer_name || "",
-      mobile: lead.phone || b.phone || "",
-      vehicle: b.vehicle_model || b.variant || lead.vehicle_interest || "",
+      customer_name: lead.customer_name || "",
+      mobile: lead.phone || "",
+      vehicle: vehicleLabel(lead, brandMap, modelMap),
       booking_amount: b.booking_amount ?? "",
-      final_amount: b.final_price ?? b.final_amount ?? "",
-      booking_date: formatDate(b.booking_date || b.created_at),
-      delivery_date: formatDate(b.delivery_date),
-      assigned_to: userMap.get(lead.assigned_to || b.assigned_to)?.name || "",
+      final_amount: b.final_deal_price ?? "",
+      booking_date: formatDate(b.booking_date),
+      delivery_date: formatDate(b.expected_delivery_date),
+      chassis_number: b.chassis_number || b.allotment?.chassis_number || "",
+      assigned_to: userMap.get(lead.assigned_to)?.name || "",
+      status: b.status || "",
     };
   });
   return {
@@ -364,8 +379,10 @@ export function buildBookingReport({ bookings, leads, users }) {
           { header: "Booking Amount", key: "booking_amount" },
           { header: "Final Amount", key: "final_amount" },
           { header: "Booking Date", key: "booking_date" },
-          { header: "Delivery Date", key: "delivery_date" },
+          { header: "Expected Delivery Date", key: "delivery_date" },
+          { header: "Chassis Number", key: "chassis_number" },
           { header: "Assigned Executive", key: "assigned_to" },
+          { header: "Status", key: "status" },
         ],
         rows,
       },
@@ -379,9 +396,9 @@ export function buildFollowUpReport({ leads, users }) {
   const rows = leads
     .filter((l) => !isConverted(l) && l.stage !== "Lost")
     .map((l) => ({
-      customer_name: l.name || "",
+      customer_name: l.customer_name || "",
       mobile: l.phone || "",
-      next_follow_up: formatDate(l.next_follow_up_at),
+      next_follow_up: formatDate(l.next_followup_date),
       assigned_to: userMap.get(l.assigned_to)?.name || "",
       stage: l.stage || "",
       priority: l.priority || "",
@@ -410,6 +427,6 @@ export const REPORT_TYPES = [
   { id: "customer", label: "Customer Details Report", builder: buildCustomerDetailsReport },
   { id: "leads", label: "Leads Report", builder: buildLeadsReport },
   { id: "lost", label: "Lost Leads Report", builder: buildLostLeadsReport },
-  { id: "booking", label: "Converted / Booking Report", builder: buildBookingReport },
+  { id: "booking", label: "Converted / Booking Report", builder: buildBookingReport, needsBookings: true },
   { id: "followup", label: "Follow-up Report", builder: buildFollowUpReport },
 ];

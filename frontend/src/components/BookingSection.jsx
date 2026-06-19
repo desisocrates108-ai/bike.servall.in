@@ -207,10 +207,6 @@ export default function BookingSection({ lead, constants, onReload }) {
 
   const assignVehicle = async () => {
     try {
-      if (!allot.chassis_number.trim()) {
-        toast.error("Chassis number is required");
-        return;
-      }
       await api.post(`/bookings/${booking.id}/allotment`, allot);
       toast.success("Vehicle allotted");
       setAllotOpen(false);
@@ -586,13 +582,14 @@ export default function BookingSection({ lead, constants, onReload }) {
                   <DialogHeader><DialogTitle>Assign vehicle</DialogTitle></DialogHeader>
                   <div className="space-y-3">
                     <div>
-                      <Label className="overline">Chassis Number *</Label>
-                      <Input value={allot.chassis_number} onChange={(e) => setAllot({ ...allot, chassis_number: e.target.value })} className="mt-2 font-mono" data-testid="allot-chassis" />
+                      <Label className="overline">Chassis Number</Label>
+                      <Input value={allot.chassis_number} onChange={(e) => setAllot({ ...allot, chassis_number: e.target.value })} className="mt-2 font-mono" data-testid="allot-chassis" placeholder="Optional" />
                     </div>
                     <div>
                       <Label className="overline">Engine Number</Label>
-                      <Input value={allot.engine_number} onChange={(e) => setAllot({ ...allot, engine_number: e.target.value })} className="mt-2 font-mono" data-testid="allot-engine" />
+                      <Input value={allot.engine_number} onChange={(e) => setAllot({ ...allot, engine_number: e.target.value })} className="mt-2 font-mono" data-testid="allot-engine" placeholder="Optional" />
                     </div>
+                    <div className="text-xs text-zinc-500">Both fields are optional. You may assign the vehicle without entering chassis or engine number.</div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setAllotOpen(false)}>Cancel</Button>
@@ -610,7 +607,7 @@ export default function BookingSection({ lead, constants, onReload }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="overline flex items-center gap-1"><Hash className="w-3 h-3" /> Chassis</div>
-              <div className="mt-1 text-sm font-mono font-bold" data-testid="allot-chassis-display">{allotment.chassis_number}</div>
+              <div className="mt-1 text-sm font-mono font-bold" data-testid="allot-chassis-display">{allotment.chassis_number || "—"}</div>
             </div>
             <div>
               <div className="overline">Engine</div>
