@@ -97,7 +97,7 @@ export function exportToPDF({ title, sheets, orientation = "landscape" }) {
 // Report builders — convert raw API data into sheet definitions
 // =====================================================================
 
-const CONVERTED_STAGES = ["Delivered", "Registered", "Feedback", "Delivery", "Registration"];
+const CONVERTED_STAGES = ["Delivery", "Allotment", "Feedback"];
 const LOST_STAGES = ["Lost"];
 
 function isConverted(l) {

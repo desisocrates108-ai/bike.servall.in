@@ -1,0 +1,42 @@
+{
+  "summary": "Iter 26 retest after main agent fixed two Iter25 critical backend bugs (server.py:2947 stage_order 'Delivered'->'Delivery' and allotments.chassis_number partial unique index). All 6 backend pytest tests now PASS (was 2/6 in Iter25). Frontend allotment dialog flow end-to-end verified: dialog opens with 'Chassis Number' label WITHOUT asterisk, empty Save succeeds with no validation error, lead auto-advances from Booking to Delivery stage, Vehicle Allotment panel shows ALLOTTED status with chassis/engine '—' for empty case. GET /api/bookings now attaches `allotment` sub-document with chassis_number/engine_number/allotted_at as required. Cleanup of all 5 TEST_* leads completed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "BookingSection / Vehicle Allotment panel",
+        "issue": "Spec mentioned a `data-testid=allotment-chassis-display` element to show chassis '—' after empty allotment, but no element with that testid is rendered. The chassis IS displayed correctly (shows '—' under '# CHASSIS' label in VEHICLE ALLOTMENT section) — only the test hook is missing. Add data-testid='allotment-chassis-display' to the chassis value cell for testability.",
+        "selector": "[data-testid=allotment-chassis-display]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter25_reports_allotment.py",
+    "/app/test_reports/pytest/iter26_results.xml"
+  ],
+  "action_items": [
+    "(Optional, LOW priority) Add data-testid='allotment-chassis-display' (and 'allotment-engine-display') to the chassis/engine value cells inside the VEHICLE ALLOTMENT panel in BookingSection.jsx so future automated tests can assert the rendered value directly."
+  ],
+  "critical_code_review_comments": [
+    "Both Iter25 critical issues are confirmed fixed at server.py (auto-advance now uses stage_order['Delivery']) and allotments.chassis_number is now a partial unique index — observed by 4 successive empty/chassis/engine/both POSTs all returning 200 in the same DB without collisions.",
+    "GET /api/bookings now returns `allotment` key on every booking object (null when no allotment, full sub-doc when allotted). Verified across 4 bookings — 4/4 have allotment attached after pytest run.",
+    "Lead stage flow after successful allotment correctly advances Hold→Delivery as designed (skips intermediate Booking when allotment performed directly; stage badge updated, top progress bar lights up through Delivery). No console errors during the flow."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (6/6 pytest tests pass — leads_sort, bookings_shape, allotment[empty,chassis_only,engine_only,both])",
+    "frontend": "100% on retested items (assign-vehicle-btn opens dialog; chassis label has no asterisk; empty save succeeds; auto-advance to Delivery; allotment attached). Leads Created Date column + DD-MM-YYYY format + newest-first sort re-verified PASS. Reports retest skipped per review-request instruction ('Reuse previous iter25 results if those still pass')."
+  },
+  "test_credentials": "superadmin@dealer.com / super123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created 4 TEST_Iter25_* leads via parametrized pytest + 1 TEST_Iter26_UI_* lead for the Playwright UI test. All 5 deleted at end via DELETE /api/leads/{id} (super_admin). DB is clean.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter25 critical backend regressions are fully resolved as of Iter26. test_iter25_reports_allotment.py is green end-to-end and can be kept as a regression suite for the allotment-optional-fields contract. If touching the booking/allotment flow again, also re-verify that the partialFilterExpression on allotments.chassis_number survives restart (server.py ~4593-4612 startup migration).",
+  "rca_of_the_issue": "Iter25 RCA reconfirmed accurate: (1) 'Delivered' was a stale stage name that didn't exist in STAGES — fix: server.py line 2947 now reads stage_order['Delivery']. (2) chassis_number had a non-partial unique index that collided on multiple nulls — fix: dropped legacy index on startup and recreated as partial with partialFilterExpression {chassis_number: {$type: 'string'}}. Both fixes verified by 4 consecutive empty-payload allotments succeeding (would have collided under old index) and lead stage cleanly transitioning to 'Delivery' (would have thrown KeyError under old code)."
+}

@@ -2944,11 +2944,11 @@ async def create_allotment(bid: str, body: AllotmentIn, user: dict = Depends(get
 
     # Auto-advance lead to Delivery
     stage_order = {s: i for i, s in enumerate(STAGES)}
-    if stage_order.get(lead.get("stage"), 0) < stage_order["Delivered"]:
+    if stage_order.get(lead.get("stage"), 0) < stage_order["Delivery"]:
         await db.leads.update_one({"id": lead["id"]},
-                                  {"$set": {"stage": "Delivered", "updated_at": now_iso()}})
+                                  {"$set": {"stage": "Delivery", "updated_at": now_iso()}})
         await add_timeline(lead["id"], "Stage Changed", user,
-                           {"from": lead.get("stage"), "to": "Delivered", "via": "allotment"})
+                           {"from": lead.get("stage"), "to": "Delivery", "via": "allotment"})
     await add_timeline(lead["id"], "Vehicle Allotted", user,
                        {"chassis_number": chassis, "engine_number": doc["engine_number"]})
     return doc
@@ -4591,7 +4591,23 @@ async def seed_data():
     await db.bookings.create_index("lead_id")
     await db.bookings.create_index("branch_id")
     await db.payments.create_index("booking_id")
-    await db.allotments.create_index("chassis_number", unique=True)
+    # Allotments — chassis is now optional, so unique index must be partial
+    # (allows multiple docs with no chassis). Drop legacy non-partial index if present.
+    try:
+        existing_idx = await db.allotments.index_information()
+        legacy = existing_idx.get("chassis_number_1")
+        if legacy and not legacy.get("partialFilterExpression"):
+            await db.allotments.drop_index("chassis_number_1")
+    except Exception as e:
+        logger.warning(f"allotments.chassis_number index drop failed: {e}")
+    try:
+        await db.allotments.create_index(
+            "chassis_number",
+            unique=True,
+            partialFilterExpression={"chassis_number": {"$type": "string"}},
+        )
+    except Exception as e:
+        logger.warning(f"allotments.chassis_number partial index create failed: {e}")
     await db.allotments.create_index("booking_id", unique=True)
     await db.documents.create_index([("lead_id", 1), ("doc_type", 1)])
     await db.documents.create_index([("doc_type", 1), ("doc_number", 1)])
