@@ -11,7 +11,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://servall-mobile.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://leads-date-tracking.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 # Direct mongo for seeding missed follow-ups

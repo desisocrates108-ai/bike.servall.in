@@ -584,7 +584,7 @@ class CampaignUpdate(BaseModel):
 
 
 class AllotmentIn(BaseModel):
-    chassis_number: str
+    chassis_number: Optional[str] = None
     engine_number: Optional[str] = None
 
 
@@ -2370,6 +2370,38 @@ async def get_booking_for_lead(lid: str, user: dict = Depends(get_current_user))
     return booking
 
 
+@api.get("/bookings")
+async def list_bookings(
+    branch_id: Optional[str] = None,
+    status: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    """List bookings with their allotments. Used by reports export."""
+    q: dict = {}
+    if user["role"] == "admin":
+        q["branch_id"] = user.get("branch_id")
+    elif user["role"] in ("sales_executive", "tele_executive"):
+        q["assigned_to"] = user["id"]
+    if branch_id and user["role"] == "super_admin":
+        q["branch_id"] = branch_id
+    if status:
+        q["status"] = status
+    bookings = await db.bookings.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    # Attach allotment info per booking
+    if bookings:
+        bids = [b["id"] for b in bookings]
+        allots = await db.allotments.find({"booking_id": {"$in": bids}}, {"_id": 0}).to_list(5000)
+        amap = {a["booking_id"]: a for a in allots}
+        for b in bookings:
+            a = amap.get(b["id"])
+            b["allotment"] = a
+            if a:
+                b["delivery_date"] = a.get("allotted_at")
+                b["chassis_number"] = b.get("chassis_number") or a.get("chassis_number")
+                b["engine_number"] = a.get("engine_number")
+    return bookings
+
+
 @api.get("/bookings/{bid}")
 async def get_booking(bid: str, user: dict = Depends(get_current_user)):
     booking = await db.bookings.find_one({"id": bid}, {"_id": 0})
@@ -2884,13 +2916,13 @@ async def create_allotment(bid: str, body: AllotmentIn, user: dict = Depends(get
     existing = await db.allotments.find_one({"booking_id": bid}, {"_id": 0})
     if existing:
         raise HTTPException(400, "Allotment already exists for this booking")
-    chassis = body.chassis_number.strip().upper()
-    if not chassis:
-        raise HTTPException(400, "Chassis number required")
-    # Unique chassis check
-    dup = await db.allotments.find_one({"chassis_number": chassis}, {"_id": 0})
-    if dup:
-        raise HTTPException(400, f"Chassis number {chassis} already assigned")
+    chassis = (body.chassis_number or "").strip().upper() or None
+    engine = (body.engine_number or "").strip().upper() or None
+    # Unique chassis check (only if provided)
+    if chassis:
+        dup = await db.allotments.find_one({"chassis_number": chassis}, {"_id": 0})
+        if dup:
+            raise HTTPException(400, f"Chassis number {chassis} already assigned")
 
     aid = str(uuid.uuid4())
     doc = {
@@ -2899,7 +2931,7 @@ async def create_allotment(bid: str, body: AllotmentIn, user: dict = Depends(get
         "booking_id": bid,
         "branch_id": booking.get("branch_id"),
         "chassis_number": chassis,
-        "engine_number": (body.engine_number or "").strip().upper() or None,
+        "engine_number": engine,
         "status": "Allotted",
         "allotted_by": user["id"],
         "allotted_by_name": user["name"],
@@ -2943,8 +2975,8 @@ async def update_allotment(aid: str, body: AllotmentUpdate,
         raise HTTPException(403, "Cannot edit allotment outside your branch")
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if "chassis_number" in updates:
-        chassis = updates["chassis_number"].strip().upper()
-        if chassis != allot["chassis_number"]:
+        chassis = (updates["chassis_number"] or "").strip().upper() or None
+        if chassis and chassis != allot.get("chassis_number"):
             dup = await db.allotments.find_one({"chassis_number": chassis}, {"_id": 0})
             if dup:
                 raise HTTPException(400, f"Chassis number {chassis} already assigned")

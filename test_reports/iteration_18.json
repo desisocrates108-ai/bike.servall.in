@@ -34,6 +34,6 @@
   "seed_data_creation": "Test created TEST_Iter18 leads + TEST*-prefixed inventory chassis. Cleanup test removed all available items + leads; 2 booked chassis remain in DB (linked to deleted leads — orphaned-but-locked). DB is otherwise clean.",
   "retest_needed": false,
   "main_agent_can_self_test": true,
-  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter18_simplification.py is the regression suite for iter-18 stages, inventory CRUD, CSV upload idempotency, exchange-photos PAN/RC buckets, and booking payment_type Token/Full + chassis lock. All 9 STAGES, /admin/migrate-stages (idempotent), and 'Walk-in' default source are validated. To re-run: REACT_APP_BACKEND_URL=https://servall-mobile.preview.emergentagent.com pytest backend/tests/test_iter18_simplification.py -v. 2 leftover booked TEST chassis remain — manual mongo cleanup if needed.",
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter18_simplification.py is the regression suite for iter-18 stages, inventory CRUD, CSV upload idempotency, exchange-photos PAN/RC buckets, and booking payment_type Token/Full + chassis lock. All 9 STAGES, /admin/migrate-stages (idempotent), and 'Walk-in' default source are validated. To re-run: REACT_APP_BACKEND_URL=https://leads-date-tracking.preview.emergentagent.com pytest backend/tests/test_iter18_simplification.py -v. 2 leftover booked TEST chassis remain — manual mongo cleanup if needed.",
   "rca of the issue": "No issues found — full pass."
 }
