@@ -607,11 +607,11 @@ export default function BookingSection({ lead, constants, onReload }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="overline flex items-center gap-1"><Hash className="w-3 h-3" /> Chassis</div>
-              <div className="mt-1 text-sm font-mono font-bold" data-testid="allot-chassis-display">{allotment.chassis_number || "—"}</div>
+              <div className="mt-1 text-sm font-mono font-bold" data-testid="allotment-chassis-display">{allotment.chassis_number || "—"}</div>
             </div>
             <div>
               <div className="overline">Engine</div>
-              <div className="mt-1 text-sm font-mono">{allotment.engine_number || "—"}</div>
+              <div className="mt-1 text-sm font-mono" data-testid="allotment-engine-display">{allotment.engine_number || "—"}</div>
             </div>
             <Kv label="Allotted by" value={allotment.allotted_by_name} />
             <Kv label="Allotted at" value={allotment.allotted_at ? new Date(allotment.allotted_at).toLocaleString() : "—"} />

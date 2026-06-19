@@ -1,5 +1,28 @@
 # CHANGELOG — Servall CRM
 
+## 2026-06-19 — Iteration 26: Reports Export + Lead Created Date + Optional Vehicle Allotment
+**Scope**: Three customer-requested features + 2 critical bug fixes. Backend 6/6 + Frontend 100% pass.
+
+### Features
+- **Reports Page Download** — New `Download Reports` button (`data-testid=download-reports-btn`) on `/reports` opens a dropdown listing 6 reports (Performance, Customer Details, Leads, Lost Leads, Converted/Booking, Follow-up). Each has Excel (.xlsx) + PDF buttons. Client-side generation via `xlsx` + `jspdf` + `jspdf-autotable`. All dates rendered DD-MM-YYYY. Respects active branch filter.
+- **Leads — Created Date column** — Added Created Date column to `/leads` desktop table and mobile cards. Format: DD-MM-YYYY. Default sort newest-first (already enforced server-side via `.sort('created_at', -1)`).
+- **Vehicle Allotment — Chassis & Engine optional** — Backend `AllotmentIn` already optional; `POST /api/bookings/{bid}/allotment` accepts empty payload. Frontend: removed `required` validation in `assignVehicle()` and dropped asterisk on the Chassis Number label.
+
+### Bug Fixes (raised by Iter25 testing)
+- **server.py:2947** `stage_order['Delivered']` → KeyError (STAGES contains 'Delivery' not 'Delivered'). Fixed to `'Delivery'`. Lead now correctly auto-advances Booking → Delivery after allotment.
+- **MongoDB `allotments.chassis_number` unique index** — now partial (`partialFilterExpression: {chassis_number: {$type: 'string'}}`) with auto-drop of legacy non-partial index on startup, so multiple allotments with `null` chassis no longer collide.
+- **`exportReports.js` CONVERTED_STAGES** drift — corrected to `['Delivery', 'Allotment', 'Feedback']` to match backend STAGES vocabulary.
+
+### Files Changed
+- `/app/backend/server.py` — allotment auto-advance fix; partial index migration; `GET /api/bookings` attaches allotment.
+- `/app/frontend/src/utils/exportReports.js` — DD-MM-YYYY formatter + 6 report builders + Excel/PDF exporters.
+- `/app/frontend/src/components/DownloadReportsMenu.jsx` — dropdown UI.
+- `/app/frontend/src/pages/Reports.jsx` — integrated DownloadReportsMenu beside branch filter.
+- `/app/frontend/src/pages/Leads.jsx` — Created Date column (desktop + mobile).
+- `/app/frontend/src/components/BookingSection.jsx` — chassis label asterisk removed; validation removed; allotment-chassis-display testid.
+- `/app/backend/tests/test_iter25_reports_allotment.py` — regression suite (created by testing agent).
+
+
 ## 2026-04-28 — Iteration 18: Full Simplification (Phases 1+2+3)
 **Scope**: Massive UX restructure — turn complex CRM into a fast dealership sales tool. 19/19 backend + frontend smoke tests **100% PASS**.
 
